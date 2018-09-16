@@ -1054,8 +1054,8 @@ pub type HWND = *mut ::std::os::raw::c_void;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tagPOINT {
-    pub x: LONG,
-    pub y: LONG,
+    pub x: *mut ::std::os::raw::c_void,
+    pub y: *mut ::std::os::raw::c_void,
 }
 #[test]
 fn bindgen_test_layout_tagPOINT() {
@@ -2552,8 +2552,8 @@ pub type LPXLOPER12 = *mut xloper12;
 // The following code has been manually edited to correct the calling conventions, which
 // were all "C". Calls such as Excel4v and XLCallVer are actually specified as "pascal"
 // calling convention which is not currently supported by Rust. This is the same as "stdcall"
-// except that the parameters are passed left-to-right rather than right-to-left. We therefore
-// fake up Pascal calls by reversing the order of the parameters.
+// except that the parameters claim at be passed left-to-right rather than right-to-left.
+// This appears not to be the case, so we therefore leave the parameter order alone.
 
 extern "cdecl" {
     #[link_name = "\u{1}_Excel4"]
@@ -2567,10 +2567,10 @@ extern "cdecl" {
 extern "stdcall" /*pascal*/ {
     #[link_name = "\u{1}EXCEL4V"]
     pub fn Excel4v(
-        opers: *mut LPXLOPER,
-        count: ::std::os::raw::c_int,
-        operRes: LPXLOPER,
         xlfn: ::std::os::raw::c_int,
+        operRes: LPXLOPER,
+        count: ::std::os::raw::c_int,
+        opers: *mut LPXLOPER,
     ) -> ::std::os::raw::c_int;
 }
 extern "stdcall" /*pascal*/ {
@@ -2580,8 +2580,8 @@ extern "stdcall" /*pascal*/ {
 extern "stdcall" /*pascal*/ {
     #[link_name = "\u{1}LPENHELPER"]
     pub fn LPenHelper(
-        lpv: *mut VOID,
         wCode: ::std::os::raw::c_int, 
+        lpv: *mut VOID,
     ) -> ::std::os::raw::c_long;
 }
 extern "cdecl" {
@@ -2596,10 +2596,10 @@ extern "cdecl" {
 extern "stdcall" /*pascal*/ {
     #[link_name = "\u{1}EXCEL12V"]
     pub fn Excel12v(
-        opers: *mut LPXLOPER12,
-        count: ::std::os::raw::c_int,
-        operRes: LPXLOPER12,
         xlfn: ::std::os::raw::c_int,
+        operRes: LPXLOPER12,
+        count: ::std::os::raw::c_int,
+        opers: *mut LPXLOPER12,
     ) -> ::std::os::raw::c_int;
 }
 pub type PXL_HPC_ASYNC_CALLBACK = ::std::option::Option<

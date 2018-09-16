@@ -30,7 +30,7 @@ typedef char* LPSTR;
 typedef void VOID;
 typedef void* HANDLE;
 typedef void* HWND;
-typedef struct tagPOINT { LONG x; LONG y; } POINT;
+typedef struct tagPOINT { void* x; void* y; } POINT;
 
 /*
 ** XL 12 Basic Datatypes 
