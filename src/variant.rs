@@ -1,13 +1,15 @@
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
 use std::{mem, fmt, slice};
-use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, 
-    xltypeNil, xltypeInt, xltypeStr, xltypeErr, xltypeMissing, xltypeNum,
+use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3, 
+    xltypeNil, xltypeInt, xltypeStr, xltypeErr, xltypeMissing, xltypeNum, xltypeMulti,
     xlbitDLLFree, xlbitXLFree,
     xlerrNull, xlerrDiv0, xlerrValue, xlerrRef, xlerrName, xlerrNum, xlerrNA, xlerrGettingData };
 use entrypoint::excel_free;
 
 const xltypeMask : u32 = !(xlbitDLLFree | xlbitXLFree);
+const xltypeStr_xlbitDLLFree: u32 = xltypeStr | xlbitDLLFree;
+const xltypeMulti_xlbitDLLFree: u32 = xltypeMulti | xlbitDLLFree;
 
 /// Variant is a wrapper around an XLOPER12. It can contain a string, i32 or f64, or a
 /// two dimensional of any mixture of these. Basically, it can contain anything that an
@@ -78,6 +80,122 @@ impl Variant {
         Variant(XLOPER12 { xltype : xltypeStr + xlbitDLLFree, val: xloper12__bindgen_ty_1 { str: p } })
     }
 
+    /// Construct a variant containing an array from a slice of other variants. The variants
+    /// may contain arrays or scalar strings or numbers, which are treated like single-cell 
+    /// arrays. They are glued either horizontally (horiz=true) or vertically. If the arrays
+    /// do not match sizes in the other dimension, they are padded with blanks.
+    pub fn concat(from: &[Variant], horiz: bool) -> Variant {
+
+        // first find the size of the resulting array
+        let mut columns : usize = 0;
+        let mut rows : usize = 0;
+        for xloper in from.iter() {
+            let dim = xloper.dim();
+            if horiz {
+                columns += dim.0;
+                rows = rows.max(dim.1);
+            } else {
+                columns = columns.max(dim.0);
+                rows += dim.1;
+            }
+        }
+
+        // Zero-sized arrays cause Excel to crash. Arrays with a dimension of
+        // one (either rows or cols) are confusing to Excel, which repeats them
+        // when using array paste. Solve both problems by padding with NA and
+        // setting the min rows or cols to two.
+        rows = rows.max(2);
+        columns = columns.max(2); 
+
+        // If the array is too big, return an error string
+        if rows > 1048576 || columns > 16384 {
+            return Self::from_str("#ERR resulting array is too big")
+        }
+
+        // now clone the components into place
+        let size = rows * columns;
+        let mut array = vec![Variant::from_err(xlerrNA); size];
+        let mut col = 0;
+        let mut row = 0;
+        for var in from.iter() {
+            match var.0.xltype & xltypeMask {
+                xltypeMulti => unsafe {
+                    let p = var.0.val.array.lparray;
+                    let var_cols = var.0.val.array.columns as usize;
+                    let var_rows = var.0.val.array.rows as usize;
+                    for x in 0..var_cols {
+                        for y in 0..var_rows {
+                            let src = (y * var_cols + x) as isize;
+                            let dest = (row + y) * columns + col + x;
+                            array[dest] = Variant::from_xloper(p.offset(src)).clone();
+                        }
+                    }
+
+                    if horiz {
+                        col += var_cols;
+                    } else {
+                        row += var_rows;
+                    }
+                },
+                xltypeMissing => {},
+                _ => {
+                    let dest = row * columns + col;
+                    array[dest] = var.clone();
+                    if horiz {
+                        col += 1;
+                    } else {
+                        row += 1;
+                    }
+                }
+            }
+        }
+
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+
+        Variant(XLOPER12 { 
+            xltype : xltypeMulti, 
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray, rows : rows as i32, columns : columns as i32 } } })
+    }
+
+    /// Creates a transposed clone of this Variant. If this Variant is a scalar type,
+    /// simply returns it unchanged.
+    pub fn transpose(&self) -> Variant {
+        // simply clone any scalar type, including errors
+        if (self.0.xltype & xltypeMask) != xltypeMulti {
+            return self.clone()
+        }
+
+        // We have an array that we need to transpose. Create a vector of
+        // Variant to contain the elements.
+        let dim = self.dim();
+        if dim.0 > 1048576 || dim.1 > 16384 {
+            return Self::from_str("#ERR resulting array is too big")
+        }
+
+        let len = dim.0 * dim.1;
+        let mut array = Vec::with_capacity(len);
+
+        // Copy the elements transposed, cloning each one
+        for i in 0..dim.1 {
+            for j in 0..dim.0 {
+                array.push(self.at(j, i));
+            }
+        }
+
+        // Return as a Variant
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+
+        Variant(XLOPER12 { 
+            xltype : xltypeMulti, 
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray, rows : dim.0 as i32, columns : dim.1 as i32 } } })
+    }
+
     /// Converts this variant to a string. Alternatively, you can use Display or to_string,
     /// which both go through this call if the variant contains a string. Guaranteed to return
     /// Some(...) if this object is of type xltypeStr. Always returns None if this object is
@@ -122,6 +240,39 @@ impl Variant {
     pub fn as_mut_xloper(&mut self) -> &mut XLOPER12 {
         &mut self.0
     }
+
+    /// Gets the count of rows and columns. Scalars are treated as 1x1. Missing values are
+    /// treated as 0x0.
+    pub fn dim(&self) -> (usize, usize) {
+        match self.0.xltype & xltypeMask {
+            xltypeMulti => unsafe { (self.0.val.array.columns as usize, self.0.val.array.rows as usize) },
+            xltypeMissing => (0, 0),
+            _ => (1, 1)
+        }
+    }
+
+    /// Gets the element at the given column and row. If this is a scalar, treat it as a one-element
+    /// array. If the column or row is out of bounds, return NA. The returned element is always cloned
+    /// so it can be returned as a value
+    pub fn at(&self, column: usize, row: usize) -> Variant {
+        if (self.0.xltype & xltypeMask) != xltypeMulti {
+            if column == 0 && row == 0 {
+                self.clone()
+            } else {
+                Self::from_err(xlerrNA)
+            }
+        } else {
+            let (columns, rows) = unsafe {
+                (self.0.val.array.columns as usize, self.0.val.array.rows as usize) };
+            if column >= columns || row >= rows {
+                Self::from_err(xlerrNA)
+            } else {
+                let index = row * columns + column;
+                Self::from_xloper( unsafe {
+                    self.0.val.array.lparray.offset(index as isize) }).clone()
+            }
+        }
+    }
 }
 
 /// Implement Display, which means we do not need a method for converting to strings. Just use
@@ -142,6 +293,7 @@ impl fmt::Display for Variant {
             }
             xltypeInt => write!(f, "{}", unsafe { self.0.val.w }),
             xltypeMissing => write!(f, "#MISSING"),
+            xltypeMulti => write!(f, "#MULTI"),
             xltypeNil => write!(f, "#NIL"),
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
             xltypeStr => write!(f, "{}", self.as_string().unwrap()),
@@ -158,21 +310,32 @@ impl Drop for Variant {
             excel_free(&mut self.0);
             return
         }
+        
         match self.0.xltype {
-            xltypeStr | xlbitDLLFree => {
+            xltypeStr_xlbitDLLFree => {
                 // We have a 16bit string that was originally allocated as a vector
                 // but then forgotten. Reconstruct the vector, so its drop method
                 // will clean up the memory for us.
                 unsafe {
                     let p = self.0.val.str;
-                    let len = *p as usize;
+                    let len = *p as usize + 1;
+                    let cap = len;
+                    Vec::from_raw_parts(p, len, cap);
+                }
+            },
+            xltypeMulti_xlbitDLLFree => {
+                // We have an array that was originally allocated as a vector of
+                // Variant but then forgotten. Reconstruct the vector, so its drop method
+                // will clean up the vector and its elements for us.
+                unsafe {
+                    let p = self.0.val.array.lparray as *mut Variant;
+                    let len = (self.0.val.array.rows * self.0.val.array.columns) as usize;
                     let cap = len;
                     Vec::from_raw_parts(p, len, cap);
                 }
             },
             _ => {
                 // nothing to do
-                // TODO we need to handle arrays
             }
         }
     }
@@ -189,13 +352,13 @@ impl Clone for Variant {
 
         // Special handling for string and mult, to avoid double delete of the member
         match copy.0.xltype {
-            xltypeStr | xlbitDLLFree => {
+            xltypeStr_xlbitDLLFree => {
 
                 // We have a 16bit string that was originally allocated as a vector
                 // but then forgotten. Reconstruct the vector, so we can clone it.
                 unsafe {
                     let p = copy.0.val.str;
-                    let len = *p as usize;
+                    let len = *p as usize + 1;
                     let cap = len;
                     let string_vec = Vec::from_raw_parts(p, len, cap);
                     let mut cloned = string_vec.clone();
@@ -206,9 +369,25 @@ impl Clone for Variant {
                     mem::forget(cloned);
                 }
             },
+            xltypeMulti_xlbitDLLFree => {
+
+                // We have an array that was originally allocated as a vector
+                // but then forgotten. Reconstruct the vector, so we can clone it.
+                unsafe {
+                    let p = self.0.val.array.lparray as *mut Variant;
+                    let len = (self.0.val.array.rows * self.0.val.array.columns) as usize;
+                    let cap = len;
+                    let array = Vec::from_raw_parts(p, len, cap);
+                    let mut cloned = array.clone();
+                    copy.0.val.array.lparray = cloned.as_mut_ptr() as LPXLOPER12;
+
+                    // now forget everything -- we do not want either string deallocated
+                    mem::forget(array);
+                    mem::forget(cloned);
+                }
+            },
             _ => {
                 // nothing to do
-                // TODO we need to handle arrays
             }
         }
 

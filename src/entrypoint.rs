@@ -5,6 +5,7 @@ use std::ptr;
 use std::mem;
 use xlcall::{LPXLOPER12, XLOPER12, xlretFailed, xlFree};
 use variant::Variant;
+use registrator::debug_print;
 use winapi::um::libloaderapi::{GetModuleHandleW, GetProcAddress};
 use winapi::shared::minwindef::HMODULE;
 use widestring::U16CString;
@@ -31,9 +32,11 @@ static mut PEXCEL12: usize = 0;
 /// of pointers. For example, if you have a single argument, it is faster to invoke
 /// the single arg version.
 pub fn excel12(xlfn: u32, opers: &mut [Variant]) -> Variant {
+    debug_print(&format!("excel12({},{})", xlfn, opers.len()));
     let mut result = Variant::new();
     let mut args: Vec<LPXLOPER12> = Vec::with_capacity(opers.len());    
     for oper in opers.iter_mut() {
+        debug_print(&format!("arg: {}", oper));
         args.push(oper.as_mut_xloper());
     }
     excel12v(xlfn as i32, result.as_mut_xloper(), &mut args);
