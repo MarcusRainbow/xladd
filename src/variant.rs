@@ -1,8 +1,9 @@
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
 use std::{mem, fmt, slice};
+use std::convert::TryFrom;
 use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3, 
-    xltypeNil, xltypeInt, xltypeStr, xltypeErr, xltypeMissing, xltypeNum, xltypeMulti,
+    xltypeNil, xltypeInt, xltypeBool, xltypeStr, xltypeErr, xltypeMissing, xltypeNum, xltypeMulti,
     xlbitDLLFree, xlbitXLFree,
     xlerrNull, xlerrDiv0, xlerrValue, xlerrRef, xlerrName, xlerrNum, xlerrNA, xlerrGettingData };
 use entrypoint::excel_free;
@@ -37,6 +38,11 @@ impl Variant {
     /// Construct a variant containing an int (i32)
     pub fn from_int(w: i32) -> Variant {
         Variant(XLOPER12 { xltype : xltypeInt, val: xloper12__bindgen_ty_1 { w: w } })
+    }
+
+    /// Construct a variant containing an int (i32)
+    pub fn from_bool(b: i32) -> Variant {
+        Variant(XLOPER12 { xltype : xltypeBool, val: xloper12__bindgen_ty_1 { xbool: b } })
     }
 
     /// Construct a variant containing a float (f64)
@@ -233,6 +239,14 @@ impl Variant {
             None
         } else {
             Some(unsafe { self.0.val.num })
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        if (self.0.xltype & xltypeMask) != xltypeBool {
+            None
+        } else {
+            Some( if unsafe { self.0.val.xbool } == 0 { false } else { true } )
         }
     }
 
