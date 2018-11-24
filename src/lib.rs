@@ -1,3 +1,4 @@
+ #![feature(try_from)]
 pub mod xlcall;
 pub mod entrypoint;
 pub mod variant;

@@ -8,6 +8,14 @@ use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, xloper12__bindgen_ty_
     xlerrNull, xlerrDiv0, xlerrValue, xlerrRef, xlerrName, xlerrNum, xlerrNA, xlerrGettingData };
 use entrypoint::excel_free;
 
+#[derive(Debug)]
+pub enum XLAddError {
+    F64ConversionFailed,
+    BoolConversionFailed,
+    IntConversionFailed,
+    StringConversionFailed,
+}
+
 const xltypeMask : u32 = !(xlbitDLLFree | xlbitXLFree);
 const xltypeStr_xlbitDLLFree: u32 = xltypeStr | xlbitDLLFree;
 const xltypeMulti_xlbitDLLFree: u32 = xltypeMulti | xlbitDLLFree;
@@ -286,6 +294,28 @@ impl Variant {
                     self.0.val.array.lparray.offset(index as isize) }).clone()
             }
         }
+    }
+}
+
+
+impl TryFrom<Variant> for f64 {
+    type Error = XLAddError;
+    fn try_from(v: Variant)->Result<Self,Self::Error> {
+        Variant::as_f64(&v).ok_or_else(|| XLAddError::F64ConversionFailed)
+    }
+}
+
+impl TryFrom<Variant> for bool {
+    type Error = XLAddError;
+    fn try_from(v: Variant)->Result<Self,Self::Error> {
+        Variant::as_bool(&v).ok_or_else(|| XLAddError::BoolConversionFailed)
+    }
+}
+
+impl TryFrom<Variant> for String {
+    type Error = XLAddError;
+    fn try_from(v: Variant)->Result<Self,Self::Error> {
+        Variant::as_string(&v).ok_or_else(|| XLAddError::StringConversionFailed)
     }
 }
 
