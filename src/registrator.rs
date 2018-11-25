@@ -71,19 +71,19 @@ impl Reg {
 
         let mut opers = vec![
             self.dll_name.clone(),
-            Variant::from_str(name),
-            Variant::from_str(arg_types),
-            Variant::from_str(name),
-            Variant::from_str(arg_text),
-            Variant::from_int(1),            // type 1 means useable anywhere (spreadsheet or macro code)
-            Variant::from_str(category),
+            Variant::from(name),
+            Variant::from(arg_types),
+            Variant::from(name),
+            Variant::from(arg_text),
+            Variant::from(1),            // type 1 means useable anywhere (spreadsheet or macro code)
+            Variant::from(category),
             Variant::missing(),              // no shortcut
             Variant::missing(),              // no help url for now. If we add it, it needn't mean another argument to add
-            Variant::from_str(help_text)];
+            Variant::from(help_text)];
 
         // append any argument help strings
         for arg in arg_help.iter() {
-            opers.push(Variant::from_str(arg));
+            opers.push(Variant::from(*arg));
         }
 
         let result = excel12(xlfRegister, opers.as_mut_slice());

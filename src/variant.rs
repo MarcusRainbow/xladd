@@ -34,32 +34,6 @@ impl Variant {
         Variant(XLOPER12 { xltype : xltypeNil, val: xloper12__bindgen_ty_1 { w: 0 } })
     }
 
-    /// Construct a variant from an LPXLOPER12, for example supplied by Excel. The assumption
-    /// is that Excel continues to own the XLOPER12 and its lifetime is greater than that of
-    /// the Variant we construct here. For example, the LPXLOPER may be an argument to one
-    /// of our functions. We therefore do not want to own any of the data in this variant, so
-    /// we clear all ownership bits. This means we treat it as a kind of dynamic mut ref. 
-    pub fn from_xloper(xloper: LPXLOPER12) -> Variant {
-        let mut result = Variant(unsafe { *xloper });
-        result.0.xltype &= xltypeMask;    // no ownership bits
-        result
-    }
-
-    /// Construct a variant containing an int (i32)
-    pub fn from_int(w: i32) -> Variant {
-        Variant(XLOPER12 { xltype : xltypeInt, val: xloper12__bindgen_ty_1 { w } })
-    }
-
-    /// Construct a variant containing an int (i32)
-    pub fn from_bool(b: i32) -> Variant {
-        Variant(XLOPER12 { xltype : xltypeBool, val: xloper12__bindgen_ty_1 { xbool: b } })
-    }
-
-    /// Construct a variant containing a float (f64)
-    pub fn from_float(num: f64) -> Variant {
-        Variant(XLOPER12 { xltype : xltypeNum, val: xloper12__bindgen_ty_1 { num } })
-    }
-
     /// Construct a variant containing a missing entry. This is used in function calls to
     /// signal that a parameter should be defaulted.
     pub fn missing() -> Variant {
@@ -71,29 +45,6 @@ impl Variant {
     /// xlerrNull, xlerrDiv0, xlerrValue, xlerrRef, xlerrName, xlerrNum, xlerrNA, xlerrGettingData
     pub fn from_err(xlerr: u32) -> Variant {
         Variant(XLOPER12 { xltype : xltypeErr, val: xloper12__bindgen_ty_1 { err: xlerr as i32 } })
-    }
-
-    /// Construct a variant containing a string. Strings in Excel (at least after Excel 97) are 16bit
-    /// Unicode starting with a 16-bit length. The length is treated as signed, which means that
-    /// strings can be no longer than 32k characters. If a string longer than this is supplied, or a 
-    /// string that is not valid 16bit Unicode, an xlerrValue error is stored instead.
-    pub fn from_str(s: &str) -> Variant {
-        let mut wstr : Vec<u16> = s.encode_utf16().collect();
-        let len = wstr.len();
-        if len > 32767 {
-            return Variant::from_err(xlerrValue)
-        }
-
-        // Pascal-style string with length at the start. Forget the string so we do not delete it.
-        // We are now relying on the drop method of Variant to clean it up for us. Note that the
-        // shrink_to_fit is essential, so the capacity is the same as the length. We have no way
-        // of storing the capacity otherwise.
-        wstr.insert(0, len as u16);
-        wstr.shrink_to_fit();
-        let p = wstr.as_mut_ptr();
-        mem::forget(wstr);
-  
-        Variant(XLOPER12 { xltype : xltypeStr + xlbitDLLFree, val: xloper12__bindgen_ty_1 { str: p } })
     }
 
     /// Construct a variant containing an array from a slice of other variants. The variants
@@ -125,7 +76,7 @@ impl Variant {
 
         // If the array is too big, return an error string
         if rows > 1_048_576 || columns > 16384 {
-            return Self::from_str("#ERR resulting array is too big")
+            return Self::from("#ERR resulting array is too big")
         }
 
         // now clone the components into place
@@ -143,7 +94,7 @@ impl Variant {
                         for y in 0..var_rows {
                             let src = (y * var_cols + x) as isize;
                             let dest = (row + y) * columns + col + x;
-                            array[dest] = Variant::from_xloper(p.offset(src)).clone();
+                            array[dest] = Variant::from(p.offset(src)).clone();
                         }
                     }
 
@@ -188,7 +139,7 @@ impl Variant {
         // Variant to contain the elements.
         let dim = self.dim();
         if dim.0 > 1_048_576 || dim.1 > 16384 {
-            return Self::from_str("#ERR resulting array is too big")
+            return Self::from("#ERR resulting array is too big")
         }
 
         let len = dim.0 * dim.1;
@@ -212,52 +163,30 @@ impl Variant {
                     lparray, rows : dim.0 as i32, columns : dim.1 as i32 } } })
     }
 
-    /// Converts this variant to a string. Alternatively, you can use Display or to_string,
-    /// which both go through this call if the variant contains a string. Guaranteed to return
-    /// Some(...) if this object is of type xltypeStr. Always returns None if this object is
-    /// of any other type. If the string contains a unicode string that is misformed, return
-    /// the error message.
-    pub fn as_string(&self) -> Option<String> {
-        if (self.0.xltype & xltypeMask) != xltypeStr {
-             None
-        } else {
-            let cstr_slice = unsafe {
-                let cstr: *const u16 = self.0.val.str;
-                let cstr_len = *cstr.offset(0) as usize;
-                slice::from_raw_parts(cstr.offset(1), cstr_len) };
-            match String::from_utf16(cstr_slice) {
-                Ok(s) => Some(s),
-                Err(e) => Some(e.to_string())
-            }
-        }
+    // To float array
+    pub fn as_float_array(array : &[f64], columns : usize, rows : usize) -> Variant {
+        // Return as a Variant
+        let mut array = array.iter().map(|v     | Variant::from(*v)).collect::<Vec<_>>();
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        Variant(XLOPER12 { 
+            xltype : xltypeMulti, 
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray, rows : rows as i32, columns :columns as i32} } })
     }
 
-    /// Converts this variant to an int. If we do not contain an int, return None. Note that
-    /// Excel cells do not ever contain ints, so this would only come from a non-Excel user
-    /// creating an XLOPER, for example the result of a call into Excel.
-    pub fn as_i32(&self) -> Option<i32> {
-        if (self.0.xltype & xltypeMask) != xltypeInt {
-            None
-        } else {
-            Some(unsafe { self.0.val.w })
-        }
-    }
-    
-    /// Converts this variant to a float. If we do not contain a float, return None.
-    pub fn as_f64(&self) -> Option<f64> {
-        if (self.0.xltype & xltypeMask) != xltypeNum {
-            None
-        } else {
-            Some(unsafe { self.0.val.num })
-        }
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
-        if (self.0.xltype & xltypeMask) != xltypeBool {
-            None
-        } else {
-            Some( !unsafe { self.0.val.xbool == 0 } )
-        }
+    // When all your values are 
+    pub fn as_string_array(array : &[&str], columns : usize, rows : usize) -> Variant {
+        // Return as a Variant
+        let mut array = array.iter().map(|v| Variant::from(*v)).collect::<Vec<_>>();
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        Variant(XLOPER12 { 
+            xltype : xltypeMulti, 
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray, rows : rows as i32, columns :columns as i32} } })
     }
 
     /// Exposes the underlying XLOPER12
@@ -292,37 +221,145 @@ impl Variant {
                 Self::from_err(xlerrNA)
             } else {
                 let index = row * columns + column;
-                Self::from_xloper( unsafe {
+                Self::from( unsafe {
                     self.0.val.array.lparray.add(index)}).clone()
             }
         }
     }
 }
 
+
+/// Construct a variant containing nil. This is used in Excel to represent cells that have
+/// nothing in them. It is also a sensible starting state for an uninitialized variant.
 impl Default for Variant {
     fn default() -> Variant {
          Variant(XLOPER12 { xltype : xltypeNil, val: xloper12__bindgen_ty_1 { w: 0 } })
     }
 }
 
-impl TryFrom<Variant> for f64 {
+/// Converts this variant to an int. If we do not contain an int, return None. Note that
+/// Excel cells do not ever contain ints, so this would only come from a non-Excel user
+/// creating an XLOPER, for example the result of a call into Excel.
+impl TryFrom<Variant> for i32 {
     type Error = XLAddError;
-    fn try_from(v: Variant)->Result<f64,Self::Error> {
-        Variant::as_f64(&v).ok_or_else(|| XLAddError::F64ConversionFailed)
+    fn try_from(v: Variant)->Result<i32,Self::Error> {
+        if (v.0.xltype & xltypeMask) != xltypeInt {
+            Err(XLAddError::IntConversionFailed)
+        } else {
+            Ok(unsafe { v.0.val.w })
+        }
     }   
 }
 
+/// Converts this variant to a float. If we do not contain a float, return Err.
+impl TryFrom<Variant> for f64 {
+    type Error = XLAddError;
+    fn try_from(v: Variant)->Result<f64,Self::Error> {
+        if (v.0.xltype & xltypeMask) != xltypeNum {
+            Err(XLAddError::F64ConversionFailed)
+        } else {
+            Ok(unsafe { v.0.val.num })
+        }
+    }   
+}
+
+/// Converts this variant to a bool. If we do not contain a bool, return Err.
 impl TryFrom<Variant> for bool {
     type Error = XLAddError;
     fn try_from(v: Variant)->Result<Self,Self::Error> {
-        Variant::as_bool(&v).ok_or_else(|| XLAddError::BoolConversionFailed)
+        if (v.0.xltype & xltypeMask) != xltypeBool {
+            Err(XLAddError::BoolConversionFailed)
+        } else {
+            Ok( !unsafe { v.0.val.xbool == 0 } )
+        }
     }
 }
 
+/// Converts this variant to a string. Alternatively, you can use Display or to_string,
+/// which both go through this call if the variant contains a string. Guaranteed to return
+/// Some(...) if this object is of type xltypeStr. Always returns None if this object is
+/// of any other type. If the string contains a unicode string that is misformed, return
+/// the error message.
 impl TryFrom<Variant> for String {
     type Error = XLAddError;
     fn try_from(v: Variant)->Result<Self,Self::Error> {
-        Variant::as_string(&v).ok_or_else(|| XLAddError::StringConversionFailed)
+        if (v.0.xltype & xltypeMask) != xltypeStr {
+             Err(XLAddError::StringConversionFailed)
+        } else {
+            let cstr_slice = unsafe {
+                let cstr: *const u16 = v.0.val.str;
+                let cstr_len = *cstr.offset(0) as usize;
+                slice::from_raw_parts(cstr.offset(1), cstr_len) };
+            match String::from_utf16(cstr_slice) {
+                Ok(s) => Ok(s),
+                Err(e) => Ok(e.to_string())
+            }
+        }
+    }
+}
+
+/// Construct a variant from an LPXLOPER12, for example supplied by Excel. The assumption
+/// is that Excel continues to own the XLOPER12 and its lifetime is greater than that of
+/// the Variant we construct here. For example, the LPXLOPER may be an argument to one
+/// of our functions. We therefore do not want to own any of the data in this variant, so
+/// we clear all ownership bits. This means we treat it as a kind of dynamic mut ref. 
+impl From<LPXLOPER12> for Variant {
+    fn from(xloper : LPXLOPER12) -> Variant {
+        let mut result = Variant(unsafe { *xloper });
+        result.0.xltype &= xltypeMask;    // no ownership bits
+        result
+    }
+}
+
+/// Construct a LPXlOPER12 from a Variant. This is just a cast to the underlying union
+/// contained within a pointer that we pass back to Excel. Excel will clean up the pointer
+/// after us
+impl From<Variant> for LPXLOPER12 {
+    fn from(v : Variant) -> LPXLOPER12 {
+        Box::into_raw(Box::new(v)) as LPXLOPER12
+    }
+}
+
+impl From<f64> for Variant {
+    fn from(num : f64) -> Variant {
+        Variant(XLOPER12 { xltype : xltypeNum, val: xloper12__bindgen_ty_1 { num } })
+    }
+}
+
+impl From<bool> for Variant {
+    fn from(xbool : bool) -> Variant {
+        Variant(XLOPER12 { xltype : xltypeBool, val: xloper12__bindgen_ty_1 { xbool : xbool as i32 } })
+    }
+}
+
+/// Construct a variant containing an int (i32)
+impl From<i32> for Variant {
+    fn from(w : i32) -> Variant {
+        Variant(XLOPER12 { xltype : xltypeInt, val: xloper12__bindgen_ty_1 { w } })
+    }
+}
+
+/// Construct a variant containing a string. Strings in Excel (at least after Excel 97) are 16bit
+/// Unicode starting with a 16-bit length. The length is treated as signed, which means that
+/// strings can be no longer than 32k characters. If a string longer than this is supplied, or a 
+/// string that is not valid 16bit Unicode, an xlerrValue error is stored instead.
+impl From<&str> for Variant {
+    fn from(s : &str) -> Variant {
+        let mut wstr : Vec<u16> = s.encode_utf16().collect();
+        let len = wstr.len();
+        if len > 32767 {
+            return Variant::from_err(xlerrValue)
+        }
+
+        // Pascal-style string with length at the start. Forget the string so we do not delete it.
+        // We are now relying on the drop method of Variant to clean it up for us. Note that the
+        // shrink_to_fit is essential, so the capacity is the same as the length. We have no way
+        // of storing the capacity otherwise.
+        wstr.insert(0, len as u16);
+        wstr.shrink_to_fit();
+        let p = wstr.as_mut_ptr();
+        mem::forget(wstr);
+        Variant(XLOPER12 { xltype : xltypeStr + xlbitDLLFree, val: xloper12__bindgen_ty_1 { str: p } })
     }
 }
 
@@ -347,7 +384,7 @@ impl fmt::Display for Variant {
             xltypeMulti => write!(f, "#MULTI"),
             xltypeNil => write!(f, "#NIL"),
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
-            xltypeStr => write!(f, "{}", self.as_string().unwrap()),
+            xltypeStr => write!(f, "{}", String::try_from(self.clone()).unwrap()),
             _ => write!(f, "#BAD_XLOPER")
         }
     }
