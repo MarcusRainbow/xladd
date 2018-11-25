@@ -91,6 +91,14 @@ impl Reg {
     }
 }
 
+impl Default for Reg {
+    fn default() -> Reg {
+        let dll_name = excel12(xlGetName, &mut []);
+        debug_print(&format!("addin loaded from: {}", dll_name));
+        Reg { dll_name }
+    }
+}
+
 pub fn debug_print(message: &str) {
     let cstr = CString::new(message).unwrap();
     unsafe { OutputDebugStringA(cstr.as_ptr()) };

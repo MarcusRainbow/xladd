@@ -1,7 +1,7 @@
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
 use std::{mem, fmt, slice};
-#[cfg(feature = "try_from")]
+//#[cfg(feature = "try_from")]
 use std::convert::TryFrom;
 use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3, 
     xltypeNil, xltypeInt, xltypeBool, xltypeStr, xltypeErr, xltypeMissing, xltypeNum, xltypeMulti,
@@ -9,7 +9,6 @@ use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, xloper12__bindgen_ty_
     xlerrNull, xlerrDiv0, xlerrValue, xlerrRef, xlerrName, xlerrNum, xlerrNA, xlerrGettingData };
 use entrypoint::excel_free;
 
-#[cfg(feature = "try_from")]
 #[derive(Debug)]
 pub enum XLAddError {
     F64ConversionFailed,
@@ -17,6 +16,7 @@ pub enum XLAddError {
     IntConversionFailed,
     StringConversionFailed,
 }
+
 
 const xltypeMask : u32 = !(xlbitDLLFree | xlbitXLFree);
 const xltypeStr_xlbitDLLFree: u32 = xltypeStr | xlbitDLLFree;
@@ -47,7 +47,7 @@ impl Variant {
 
     /// Construct a variant containing an int (i32)
     pub fn from_int(w: i32) -> Variant {
-        Variant(XLOPER12 { xltype : xltypeInt, val: xloper12__bindgen_ty_1 { w: w } })
+        Variant(XLOPER12 { xltype : xltypeInt, val: xloper12__bindgen_ty_1 { w } })
     }
 
     /// Construct a variant containing an int (i32)
@@ -57,7 +57,7 @@ impl Variant {
 
     /// Construct a variant containing a float (f64)
     pub fn from_float(num: f64) -> Variant {
-        Variant(XLOPER12 { xltype : xltypeNum, val: xloper12__bindgen_ty_1 { num: num } })
+        Variant(XLOPER12 { xltype : xltypeNum, val: xloper12__bindgen_ty_1 { num } })
     }
 
     /// Construct a variant containing a missing entry. This is used in function calls to
@@ -124,7 +124,7 @@ impl Variant {
         columns = columns.max(2); 
 
         // If the array is too big, return an error string
-        if rows > 1048576 || columns > 16384 {
+        if rows > 1_048_576 || columns > 16384 {
             return Self::from_str("#ERR resulting array is too big")
         }
 
@@ -187,7 +187,7 @@ impl Variant {
         // We have an array that we need to transpose. Create a vector of
         // Variant to contain the elements.
         let dim = self.dim();
-        if dim.0 > 1048576 || dim.1 > 16384 {
+        if dim.0 > 1_048_576 || dim.1 > 16384 {
             return Self::from_str("#ERR resulting array is too big")
         }
 
@@ -256,7 +256,7 @@ impl Variant {
         if (self.0.xltype & xltypeMask) != xltypeBool {
             None
         } else {
-            Some( if unsafe { self.0.val.xbool } == 0 { false } else { true } )
+            Some( !unsafe { self.0.val.xbool == 0 } )
         }
     }
 
@@ -293,22 +293,25 @@ impl Variant {
             } else {
                 let index = row * columns + column;
                 Self::from_xloper( unsafe {
-                    self.0.val.array.lparray.offset(index as isize) }).clone()
+                    self.0.val.array.lparray.add(index)}).clone()
             }
         }
     }
 }
 
+impl Default for Variant {
+    fn default() -> Variant {
+         Variant(XLOPER12 { xltype : xltypeNil, val: xloper12__bindgen_ty_1 { w: 0 } })
+    }
+}
 
-#[cfg(feature = "try_from")]
 impl TryFrom<Variant> for f64 {
     type Error = XLAddError;
-    fn try_from(v: Variant)->Result<Self,Self::Error> {
+    fn try_from(v: Variant)->Result<f64,Self::Error> {
         Variant::as_f64(&v).ok_or_else(|| XLAddError::F64ConversionFailed)
     }   
 }
 
-#[cfg(feature = "try_from")]
 impl TryFrom<Variant> for bool {
     type Error = XLAddError;
     fn try_from(v: Variant)->Result<Self,Self::Error> {
@@ -316,7 +319,6 @@ impl TryFrom<Variant> for bool {
     }
 }
 
-#[cfg(feature = "try_from")]
 impl TryFrom<Variant> for String {
     type Error = XLAddError;
     fn try_from(v: Variant)->Result<Self,Self::Error> {
@@ -395,7 +397,7 @@ impl Clone for Variant {
     fn clone(&self) -> Variant {
         // a simple copy is good enough for most variant types, but make sure the addin
         // is the owner
-        let mut copy = Variant(self.0.clone());
+        let mut copy = Variant(self.0);
         copy.0.xltype &= !xlbitXLFree;
         copy.0.xltype |= xlbitDLLFree;
 

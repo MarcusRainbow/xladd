@@ -39,7 +39,7 @@ pub fn excel12(xlfn: u32, opers: &mut [Variant]) -> Variant {
         debug_print(&format!("arg: {}", oper));
         args.push(oper.as_mut_xloper());
     }
-    excel12v(xlfn as i32, result.as_mut_xloper(), &mut args);
+    excel12v(xlfn as i32, result.as_mut_xloper(), &args);
     result
 }
 
