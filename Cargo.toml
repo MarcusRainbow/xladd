@@ -2,6 +2,7 @@
 name = "xladd"
 version = "0.1.0"
 authors = ["Marcus Rainbow"]
+repository = "https://github.com/MarcusRainbow/xladd"
 
 [dependencies]
 winapi = { version = "0.3.5", features = ["winuser", "libloaderapi", "debugapi"] }
