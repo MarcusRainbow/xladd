@@ -2564,7 +2564,7 @@ extern "cdecl" {
         ...
     ) -> ::std::os::raw::c_int;
 }
-extern "stdcall" /*pascal*/ {
+extern "stdcall" {
     #[link_name = "\u{1}EXCEL4V"]
     pub fn Excel4v(
         xlfn: ::std::os::raw::c_int,
@@ -2573,16 +2573,13 @@ extern "stdcall" /*pascal*/ {
         opers: *mut LPXLOPER,
     ) -> ::std::os::raw::c_int;
 }
-extern "stdcall" /*pascal*/ {
+extern "stdcall" {
     #[link_name = "\u{1}XLCALLVER"]
     pub fn XLCallVer() -> ::std::os::raw::c_int;
 }
-extern "stdcall" /*pascal*/ {
+extern "stdcall" {
     #[link_name = "\u{1}LPENHELPER"]
-    pub fn LPenHelper(
-        wCode: ::std::os::raw::c_int, 
-        lpv: *mut VOID,
-    ) -> ::std::os::raw::c_long;
+    pub fn LPenHelper(wCode: ::std::os::raw::c_int, lpv: *mut VOID) -> ::std::os::raw::c_long;
 }
 extern "cdecl" {
     #[link_name = "\u{1}_Excel12"]
@@ -2593,7 +2590,7 @@ extern "cdecl" {
         ...
     ) -> ::std::os::raw::c_int;
 }
-extern "stdcall" /*pascal*/ {
+extern "stdcall" {
     #[link_name = "\u{1}EXCEL12V"]
     pub fn Excel12v(
         xlfn: ::std::os::raw::c_int,
@@ -2603,7 +2600,10 @@ extern "stdcall" /*pascal*/ {
     ) -> ::std::os::raw::c_int;
 }
 pub type PXL_HPC_ASYNC_CALLBACK = ::std::option::Option<
-    unsafe extern "stdcall" fn(dwAsyncHandle: DWORD, operReturn: LPXLOPER12) -> ::std::os::raw::c_int,
+    unsafe extern "stdcall" fn(
+        dwAsyncHandle: DWORD,
+        operReturn: LPXLOPER12,
+    ) -> ::std::os::raw::c_int,
 >;
 // -EDIT
 

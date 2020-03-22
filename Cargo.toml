@@ -1,8 +1,8 @@
 [package]
-name = "xladd"
-version = "0.1.0"
-authors = ["Marcus Rainbow"]
+name = "rust_xl"
+version = "0.2.0"
+authors = ["Ronnie Chowdhury"]
 
 [dependencies]
-winapi = { version = "0.3.5", features = ["winuser", "libloaderapi", "debugapi"] }
-widestring = "0.4.0"
+winapi = { version = "*", features = ["winuser", "libloaderapi", "debugapi"] }
+widestring = "*"
