@@ -174,48 +174,6 @@ impl Variant {
         })
     }
 
-    // To float array
-    pub fn convert_float_array(array: Vec<f64>, columns: usize, rows: usize) -> Variant {
-        // Return as a Variant
-        let mut array = array
-            .iter()
-            .map(|&v| match v {
-                v if v.is_nan() => Variant::from_err(xlerrNA),
-                v => Variant::from(v),
-            })
-            .collect::<Vec<_>>();
-        let lparray = array.as_mut_ptr() as LPXLOPER12;
-        mem::forget(array);
-        Variant(XLOPER12 {
-            xltype: xltypeMulti,
-            val: xloper12__bindgen_ty_1 {
-                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
-                    lparray,
-                    rows: rows as i32,
-                    columns: columns as i32,
-                },
-            },
-        })
-    }
-
-    // When all your values are
-    pub fn convert_string_array(array: Vec<&str>, columns: usize, rows: usize) -> Variant {
-        // Return as a Variant
-        let mut array = array.iter().map(|v| Variant::from(*v)).collect::<Vec<_>>();
-        let lparray = array.as_mut_ptr() as LPXLOPER12;
-        mem::forget(array);
-        Variant(XLOPER12 {
-            xltype: xltypeMulti,
-            val: xloper12__bindgen_ty_1 {
-                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
-                    lparray,
-                    rows: rows as i32,
-                    columns: columns as i32,
-                },
-            },
-        })
-    }
-
     /// Exposes the underlying XLOPER12
     pub fn as_mut_xloper(&mut self) -> &mut XLOPER12 {
         &mut self.0
@@ -408,6 +366,7 @@ impl From<Variant> for LPXLOPER12 {
     }
 }
 
+/// Construct a variant containing an float (f64)
 impl From<f64> for Variant {
     fn from(num: f64) -> Variant {
         Variant(XLOPER12 {
@@ -417,6 +376,7 @@ impl From<f64> for Variant {
     }
 }
 
+/// Construct a variant containing an bool (i32)
 impl From<bool> for Variant {
     fn from(xbool: bool) -> Variant {
         Variant(XLOPER12 {
@@ -434,6 +394,58 @@ impl From<i32> for Variant {
         Variant(XLOPER12 {
             xltype: xltypeInt,
             val: xloper12__bindgen_ty_1 { w },
+        })
+    }
+}
+
+/// Construct a variant containing an array of strings
+/// Pass in a tuple of (array, columns), it will calculate the number of rows.
+impl From<&(&[&str], usize)> for Variant {
+    fn from(arr: &(&[&str], usize)) -> Variant {
+        let mut array = arr.0.iter().map(|&v| Variant::from(v)).collect::<Vec<_>>();
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        let rows = arr.0.len() / arr.1;
+        let columns = arr.1;
+        Variant(XLOPER12 {
+            xltype: xltypeMulti,
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray,
+                    rows: rows as i32,
+                    columns: columns as i32,
+                },
+            },
+        })
+    }
+}
+
+/// Construct a variant containing an array of strings
+/// Pass in a tuple of (array, columns), it will calculate the number of rows.
+impl From<&(&[f64], usize)> for Variant {
+    fn from(arr: &(&[f64], usize)) -> Variant {
+        // Return as a Variant
+        let mut array = arr
+            .0
+            .iter()
+            .map(|&v| match v {
+                v if v.is_nan() => Variant::from_err(xlerrNA),
+                v => Variant::from(v),
+            })
+            .collect::<Vec<_>>();
+        let rows = arr.0.len() / arr.1;
+        let columns = arr.1;
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        Variant(XLOPER12 {
+            xltype: xltypeMulti,
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray,
+                    rows: rows as i32,
+                    columns: columns as i32,
+                },
+            },
         })
     }
 }
