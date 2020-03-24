@@ -3,8 +3,9 @@
 use std::{fmt, mem, slice};
 //#[cfg(feature = "try_from")]
 use entrypoint::excel_free;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::f64;
+use xlcall::xloper12;
 use xlcall::{
     xlbitDLLFree, xlbitXLFree, xlerrDiv0, xlerrGettingData, xlerrNA, xlerrName, xlerrNull,
     xlerrNum, xlerrRef, xlerrValue, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3,
@@ -19,6 +20,17 @@ pub enum XLAddError {
     IntConversionFailed,
     StringConversionFailed,
 }
+
+impl std::error::Error for XLAddError {
+
+}
+
+impl fmt::Display for XLAddError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,"error")
+    }
+}
+
 
 const xltypeMask: u32 = !(xlbitDLLFree | xlbitXLFree);
 const xltypeStr_xlbitDLLFree: u32 = xltypeStr | xlbitDLLFree;
@@ -235,9 +247,9 @@ impl Default for Variant {
 /// Converts this variant to an int. If we do not contain an int, return None. Note that
 /// Excel cells do not ever contain ints, so this would only come from a non-Excel user
 /// creating an XLOPER, for example the result of a call into Excel.
-impl TryFrom<Variant> for i32 {
+impl<'a> TryFrom<&'a Variant> for i32 {
     type Error = XLAddError;
-    fn try_from(v: Variant) -> Result<i32, Self::Error> {
+    fn try_from(v: &'a Variant) -> Result<i32, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeInt {
             Err(XLAddError::IntConversionFailed)
         } else {
@@ -247,9 +259,9 @@ impl TryFrom<Variant> for i32 {
 }
 
 /// Converts this variant to a float. If we do not contain a float, return Err.
-impl TryFrom<Variant> for f64 {
+impl<'a> TryFrom<&'a Variant> for f64 {
     type Error = XLAddError;
-    fn try_from(v: Variant) -> Result<f64, Self::Error> {
+    fn try_from(v: &'a Variant) -> Result<f64, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeNum {
             Err(XLAddError::F64ConversionFailed)
         } else {
@@ -259,9 +271,9 @@ impl TryFrom<Variant> for f64 {
 }
 
 /// Converts this variant to a bool. If we do not contain a bool, return Err.
-impl TryFrom<Variant> for bool {
+impl<'a> TryFrom<&'a Variant> for bool {
     type Error = XLAddError;
-    fn try_from(v: Variant) -> Result<Self, Self::Error> {
+    fn try_from(v: &'a Variant) -> Result<Self, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeBool {
             Err(XLAddError::BoolConversionFailed)
         } else {
@@ -275,9 +287,9 @@ impl TryFrom<Variant> for bool {
 /// Some(...) if this object is of type xltypeStr. Always returns None if this object is
 /// of any other type. If the string contains a unicode string that is misformed, return
 /// the error message.
-impl TryFrom<Variant> for String {
+impl<'a> TryFrom<&'a Variant> for String {
     type Error = XLAddError;
-    fn try_from(v: Variant) -> Result<Self, Self::Error> {
+    fn try_from(v: &'a Variant) -> Result<Self, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeStr {
             Err(XLAddError::StringConversionFailed)
         } else {
@@ -296,13 +308,21 @@ impl TryFrom<Variant> for String {
 
 /// Converts a variant into a f64 array filling the missing or invalid with f64::NAN.
 /// This is so that you can handle those appropriately for your application (for example fill with the mean value or 0)
-impl From<Variant> for Vec<f64> {
-    fn from(v: Variant) -> Vec<f64> {
+impl<'a> From<&'a Variant> for Vec<f64> {
+    fn from(v: &'a Variant) -> Vec<f64> {
         let (x, y) = v.dim();
-        let mut res: Vec<f64> = Vec::new();
+        let mut res = vec![0f64; x * y];
         for j in 0..y {
             for i in 0..x {
-                res.push(v.at(i, j).try_into().map_or_else(|_| f64::NAN, |v| v));
+                let index = j * x + i;
+                let slice =
+                    unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len()) };
+                let v = slice[index];
+                res[index] = if v.xltype & xltypeMask != xltypeNum {
+                    f64::NAN
+                } else {
+                    unsafe { v.val.num }
+                };
             }
         }
         res
@@ -311,33 +331,29 @@ impl From<Variant> for Vec<f64> {
 
 /// Converts a variant into a f64 array filling the missing or invalid with f64::NAN.
 /// This is so that you can handle those appropriately for your application (for example fill with the mean value or 0)
-impl From<Variant> for Vec<f32> {
-    fn from(v: Variant) -> Vec<f32> {
-        use std::f32;
+impl<'a> From<&'a Variant> for Vec<String> {
+    fn from(v: &'a Variant) -> Vec<String> {
         let (x, y) = v.dim();
-        let mut res: Vec<f32> = Vec::new();
+        let mut res = vec![String::new(); x * y];
         for j in 0..y {
             for i in 0..x {
-                res.push(
-                    v.at(i, j)
-                        .try_into()
-                        .map_or_else(|_| f32::NAN, |v: f64| v as f32),
-                );
-            }
-        }
-        res
-    }
-}
-
-/// Converts a variant into a f64 array filling the missing or invalid with f64::NAN.
-/// This is so that you can handle those appropriately for your application (for example fill with the mean value or 0)
-impl From<Variant> for Vec<String> {
-    fn from(v: Variant) -> Vec<String> {
-        let (x, y) = v.dim();
-        let mut res: Vec<String> = Vec::new();
-        for j in 0..y {
-            for i in 0..x {
-                res.push(v.at(i, j).try_into().map_or_else(|_| String::new(), |v| v));
+                let index = j * x + i;
+                let slice =
+                    unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len()) };
+                let v = slice[index];
+                res[index] = if (v.xltype & xltypeMask) != xltypeStr {
+                    String::new()
+                } else {
+                    let cstr_slice = unsafe {
+                        let cstr: *const u16 = v.val.str;
+                        let cstr_len = *cstr.offset(0) as usize;
+                        slice::from_raw_parts(cstr.offset(1), cstr_len)
+                    };
+                    match String::from_utf16(cstr_slice) {
+                        Ok(s) => s,
+                        Err(e) => e.to_string(),
+                    }
+                }
             }
         }
         res
@@ -498,7 +514,7 @@ impl fmt::Display for Variant {
             xltypeMulti => write!(f, "#MULTI"),
             xltypeNil => write!(f, "#NIL"),
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
-            xltypeStr => write!(f, "{}", String::try_from(self.clone()).unwrap()),
+            xltypeStr => write!(f, "{}", String::try_from(&self.clone()).unwrap()),
             _ => write!(f, "#BAD_XLOPER"),
         }
     }
