@@ -21,16 +21,13 @@ pub enum XLAddError {
     StringConversionFailed,
 }
 
-impl std::error::Error for XLAddError {
-
-}
+impl std::error::Error for XLAddError {}
 
 impl fmt::Display for XLAddError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f,"error")
+        write!(f, "error")
     }
 }
-
 
 const xltypeMask: u32 = !(xlbitDLLFree | xlbitXLFree);
 const xltypeStr_xlbitDLLFree: u32 = xltypeStr | xlbitDLLFree;
@@ -610,46 +607,3 @@ impl Clone for Variant {
         copy
     }
 }
-
-/*
-pub extern "stdcall" fn aarc_normalize(
-    array: LPXLOPER12,
-    min: LPXLOPER12,
-    max: LPXLOPER12,
-    scale: LPXLOPER12,
-) -> LPXLOPER12 {
-    match normalize(
-        Variant::from(array),
-        Variant::from(min),
-        Variant::from(max),
-        Variant::from(scale),
-    ) {
-        Ok(v) => LPXLOPER12::from(v),
-        _ => LPXLOPER12::from(Variant::from("Invalid")),
-    }
-}
-
-
-pub fn normalize(
-    array: Variant,
-    min: Variant,
-    max: Variant,
-    norm_type: Variant,
-) -> Result<Variant, AARCError> {
-    let min: f64 = min.try_into()?;
-    let max: f64 = max.try_into()?;
-    let norm_type: f64 = norm_type.try_into()?;
-    let (x, y) = array.dim();
-    let array: Vec<f64> = array.into();
-    let result = match norm_type as i64 {
-        1 => normalize::tanh_est(&array),
-        _ => normalize::min_max_norm(&array, min, max),
-    };
-    Ok(Variant::convert_float_array(result, x, y))
-    // Zscore normalization
-    // Tanh Normalization
-}
-
-pub fn min_max_norm(array: &[f64], min: f64, max: f64) -> Vec<f64> {
-
-*/

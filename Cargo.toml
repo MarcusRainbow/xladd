@@ -1,5 +1,5 @@
 [package]
-name = "rust_xl"
+name = "xladd"
 version = "0.2.0"
 authors = ["Ronnie Chowdhury"]
 
