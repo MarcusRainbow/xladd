@@ -2,16 +2,16 @@
 
 use std::{fmt, mem, slice};
 //#[cfg(feature = "try_from")]
-use entrypoint::excel_free;
-use std::convert::TryFrom;
-use std::f64;
-use xlcall::xloper12;
-use xlcall::{
+use crate::entrypoint::excel_free;
+use crate::xlcall::xloper12;
+use crate::xlcall::{
     xlbitDLLFree, xlbitXLFree, xlerrDiv0, xlerrGettingData, xlerrNA, xlerrName, xlerrNull,
     xlerrNum, xlerrRef, xlerrValue, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3,
     xltypeBool, xltypeErr, xltypeInt, xltypeMissing, xltypeMulti, xltypeNil, xltypeNum, xltypeStr,
     LPXLOPER12, XLOPER12,
 };
+use std::convert::TryFrom;
+use std::f64;
 
 #[derive(Debug)]
 pub enum XLAddError {

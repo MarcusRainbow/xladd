@@ -2,7 +2,9 @@
 name = "xladd"
 version = "0.2.0"
 authors = ["Ronnie Chowdhury"]
+edition = "2018"
 
 [dependencies]
 winapi = { version = "*", features = ["winuser", "libloaderapi", "debugapi"] }
 widestring = "*"
+log="0.4.8"

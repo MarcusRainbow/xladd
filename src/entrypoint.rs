@@ -1,15 +1,15 @@
 //! Entry point code for xladd, based on the sample C++ code
 //! supplied with the Microsoft Excel12 SDK
 
-use registrator::debug_print;
+use crate::registrator::debug_print;
+use crate::variant::Variant;
+use crate::xlcall::{xlFree, xlretFailed, LPXLOPER12, XLOPER12};
 use std::ffi::CStr;
 use std::mem;
 use std::ptr;
-use variant::Variant;
 use widestring::U16CString;
 use winapi::shared::minwindef::HMODULE;
 use winapi::um::libloaderapi::{GetModuleHandleW, GetProcAddress};
-use xlcall::{xlFree, xlretFailed, LPXLOPER12, XLOPER12};
 
 const EXCEL12ENTRYPT: &[u8] = b"MdCallBack12\0";
 const XLCALL32DLL: &str = "XLCall32";

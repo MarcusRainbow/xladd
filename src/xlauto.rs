@@ -4,7 +4,7 @@
 //! only it knows what it wants to export. Other xlAuto methods can be added
 //! here as required.
 
-use xlcall::LPXLOPER12;
+use crate::xlcall::LPXLOPER12;
 
 #[no_mangle]
 pub extern "stdcall" fn xlAutoFree12(px_free: LPXLOPER12) {

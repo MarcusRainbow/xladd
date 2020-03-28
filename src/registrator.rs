@@ -1,8 +1,7 @@
-use entrypoint::excel12;
-use std::ffi::CString;
-use variant::Variant;
-use winapi::um::debugapi::OutputDebugStringA;
-use xlcall::{xlGetName, xlfRegister};
+use crate::entrypoint::excel12;
+use crate::variant::Variant;
+use crate::xlcall::{xlGetName, xlfRegister};
+use log::trace;
 
 /// Allow xlls to register their exported functions with Excel so they can be
 /// used in a spreadsheet or macro. These functions can only be called from
@@ -100,7 +99,6 @@ impl Default for Reg {
     }
 }
 
-pub fn debug_print(message: &str) {
-    let cstr = CString::new(message).unwrap();
-    unsafe { OutputDebugStringA(cstr.as_ptr()) };
+pub(crate) fn debug_print(message: &str) {
+    trace!("{}", message);
 }
