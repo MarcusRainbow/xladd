@@ -3,6 +3,12 @@ name = "xladd"
 version = "0.2.0"
 authors = ["Ronnie Chowdhury"]
 edition = "2018"
+license = "MIT"
+description="An interface to the Excelv12 api to help write UDF."
+readme="Readme.MD"
+repository="https://github.com/ronniec95/xladd"
+keywords = ["excel","userdefined","udf"]
+
 
 [dependencies]
 winapi = { version = "*", features = ["winuser", "libloaderapi", "debugapi"] }
