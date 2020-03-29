@@ -502,6 +502,16 @@ impl From<&str> for Variant {
     }
 }
 
+/// Construct a variant containing a string. Strings in Excel (at least after Excel 97) are 16bit
+/// Unicode starting with a 16-bit length. The length is treated as signed, which means that
+/// strings can be no longer than 32k characters. If a string longer than this is supplied, or a
+/// string that is not valid 16bit Unicode, an xlerrValue error is stored instead.
+impl From<String> for Variant {
+    fn from(s: String) -> Variant {
+        From::<&str>::from(s.as_str())
+    }
+}
+
 /// Implement Display, which means we do not need a method for converting to strings. Just use
 /// to_string.
 impl fmt::Display for Variant {
