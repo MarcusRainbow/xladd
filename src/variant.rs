@@ -316,7 +316,7 @@ impl<'a> From<&'a Variant> for Vec<f64> {
                     unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len()) };
                 let v = slice[index];
                 res[index] = if v.xltype & xltypeMask != xltypeNum {
-                    f64::NAN
+                    0.0f64
                 } else {
                     unsafe { v.val.num }
                 };
