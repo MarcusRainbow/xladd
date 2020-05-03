@@ -1,6 +1,6 @@
 [package]
 name = "xladd"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Ronnie Chowdhury"]
 edition = "2018"
 license = "MIT"
@@ -9,8 +9,12 @@ readme="Readme.MD"
 repository="https://github.com/ronniec95/xladd"
 keywords = ["excel","userdefined","udf"]
 
+[features]
+default = []
+use_ndarray=["ndarray"]
 
 [dependencies]
 winapi = { version = "*", features = ["winuser", "libloaderapi", "debugapi"] }
 widestring = "*"
 log="0.4.8"
+ndarray = {version = "^0.13", optional=true }

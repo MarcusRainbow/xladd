@@ -309,17 +309,22 @@ impl<'a> From<&'a Variant> for Vec<f64> {
     fn from(v: &'a Variant) -> Vec<f64> {
         let (x, y) = v.dim();
         let mut res = vec![0f64; x * y];
-        for j in 0..y {
-            for i in 0..x {
-                let index = j * x + i;
-                let slice =
-                    unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len()) };
-                let v = slice[index];
-                res[index] = if v.xltype & xltypeMask != xltypeNum {
-                    0.0f64
-                } else {
-                    unsafe { v.val.num }
-                };
+        if x <= 1 && y <= 1 {
+            res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
+        } else {
+            for j in 0..y {
+                for i in 0..x {
+                    let index = j * x + i;
+                    let slice = unsafe {
+                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
+                    };
+                    let v = slice[index];
+                    res[index] = if v.xltype & xltypeMask != xltypeNum {
+                        0.0f64
+                    } else {
+                        unsafe { v.val.num }
+                    };
+                }
             }
         }
         res
@@ -332,23 +337,29 @@ impl<'a> From<&'a Variant> for Vec<String> {
     fn from(v: &'a Variant) -> Vec<String> {
         let (x, y) = v.dim();
         let mut res = vec![String::new(); x * y];
-        for j in 0..y {
-            for i in 0..x {
-                let index = j * x + i;
-                let slice =
-                    unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len()) };
-                let v = slice[index];
-                res[index] = if (v.xltype & xltypeMask) != xltypeStr {
-                    String::new()
-                } else {
-                    let cstr_slice = unsafe {
-                        let cstr: *const u16 = v.val.str;
-                        let cstr_len = *cstr.offset(0) as usize;
-                        slice::from_raw_parts(cstr.offset(1), cstr_len)
+
+        if x <= 1 && y <= 1 {
+            res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
+        } else {
+            for j in 0..y {
+                for i in 0..x {
+                    let index = j * x + i;
+                    let slice = unsafe {
+                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
                     };
-                    match String::from_utf16(cstr_slice) {
-                        Ok(s) => s,
-                        Err(e) => e.to_string(),
+                    let v = slice[index];
+                    res[index] = if (v.xltype & xltypeMask) != xltypeStr {
+                        String::new()
+                    } else {
+                        let cstr_slice = unsafe {
+                            let cstr: *const u16 = v.val.str;
+                            let cstr_len = *cstr.offset(0) as usize;
+                            slice::from_raw_parts(cstr.offset(1), cstr_len)
+                        };
+                        match String::from_utf16(cstr_slice) {
+                            Ok(s) => s,
+                            Err(e) => e.to_string(),
+                        }
                     }
                 }
             }
@@ -627,5 +638,124 @@ impl Clone for Variant {
         }
 
         copy
+    }
+}
+
+// NDArray support for 2d arrays
+#[cfg(feature = "use_ndarray")]
+use ndarray::Array2;
+
+#[cfg(feature = "use_ndarray")]
+impl<'a> From<&'a Variant> for Array2<f64> {
+    fn from(v: &'a Variant) -> Array2<f64> {
+        let (x, y) = v.dim();
+        let mut res = Array2::zeros([y, x]);
+        // Not an array
+        if x <= 1 && y <= 1 {
+            res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
+        } else {
+            for j in 0..y {
+                for i in 0..x {
+                    let index = j * x + i;
+                    let slice = unsafe {
+                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
+                    };
+                    let v = slice[index];
+                    res[[j, i]] = if v.xltype & xltypeMask != xltypeNum {
+                        0.0f64
+                    } else {
+                        dbg!(&unsafe { v.val.num });
+                        unsafe { v.val.num }
+                    };
+                }
+            }
+        }
+        res
+    }
+}
+
+#[cfg(feature = "use_ndarray")]
+impl<'a> From<&'a Variant> for Array2<String> {
+    fn from(v: &'a Variant) -> Array2<String> {
+        let (x, y) = v.dim();
+        let mut res = Array2::from_elem([y, x], String::new());
+        if x <= 1 && y <= 1 {
+            res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
+        } else {
+            for j in 0..y {
+                for i in 0..x {
+                    let index = j * x + i;
+                    let slice = unsafe {
+                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
+                    };
+                    let v = slice[index];
+                    res[[j, i]] = if (v.xltype & xltypeMask) != xltypeStr {
+                        String::new()
+                    } else {
+                        let cstr_slice = unsafe {
+                            let cstr: *const u16 = v.val.str;
+                            let cstr_len = *cstr.offset(0) as usize;
+                            slice::from_raw_parts(cstr.offset(1), cstr_len)
+                        };
+                        match String::from_utf16(cstr_slice) {
+                            Ok(s) => s,
+                            Err(e) => e.to_string(),
+                        }
+                    }
+                }
+            }
+        }
+        res
+    }
+}
+
+#[cfg(feature = "use_ndarray")]
+impl From<Array2<f64>> for Variant {
+    fn from(arr: Array2<f64>) -> Variant {
+        // Return as a Variant
+        let mut array = arr
+            .iter()
+            .map(|&v| match v {
+                v if v.is_nan() => Variant::from_err(xlerrNA),
+                v => Variant::from(v),
+            })
+            .collect::<Vec<_>>();
+        let rows = arr.nrows();
+        let columns = arr.ncols();
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else if rows > 32767 {
+            Variant::from_err(xlerrValue)
+        } else {
+            let lparray = array.as_mut_ptr() as LPXLOPER12;
+            mem::forget(array);
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: rows as i32,
+                        columns: columns as i32,
+                    },
+                },
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(feature = "use_ndarray")]
+    use ndarray::Array2;
+    #[cfg(feature = "use_ndarray")]
+    #[test]
+    fn ndarray_conv() {
+        let arr = Array2::from_shape_vec([2, 2], vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let v: Variant = From::<Array2<f64>>::from(arr.clone());
+        let conv: Array2<f64> = From::<&Variant>::from(&v);
+        dbg!(&arr);
+        dbg!(&conv);
+        assert_eq!(arr, conv);
     }
 }
