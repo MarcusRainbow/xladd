@@ -310,7 +310,7 @@ impl<'a> From<&'a Variant> for Vec<f64> {
         let (x, y) = v.dim();
         let mut res = vec![0f64; x * y];
         if x <= 1 && y <= 1 {
-            res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
+            // res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
         } else {
             for j in 0..y {
                 for i in 0..x {
@@ -339,7 +339,7 @@ impl<'a> From<&'a Variant> for Vec<String> {
         let mut res = vec![String::new(); x * y];
 
         if x <= 1 && y <= 1 {
-            res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
+            //    res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
         } else {
             for j in 0..y {
                 for i in 0..x {
@@ -429,7 +429,7 @@ impl From<&(&[&str], usize)> for Variant {
         let mut array = arr.0.iter().map(|&v| Variant::from(v)).collect::<Vec<_>>();
         let lparray = array.as_mut_ptr() as LPXLOPER12;
         mem::forget(array);
-        let rows = arr.0.len() / arr.1;
+        let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
         let columns = arr.1;
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
@@ -463,7 +463,7 @@ impl From<&(&[f64], usize)> for Variant {
                 v => Variant::from(v),
             })
             .collect::<Vec<_>>();
-        let rows = arr.0.len() / arr.1;
+        let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
         let columns = arr.1;
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
