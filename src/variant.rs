@@ -308,9 +308,9 @@ impl<'a> TryFrom<&'a Variant> for String {
 impl<'a> From<&'a Variant> for Vec<f64> {
     fn from(v: &'a Variant) -> Vec<f64> {
         let (x, y) = v.dim();
-        let mut res = vec![0f64; x * y];
-        if x <= 1 && y <= 1 {
-            // res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
+        let mut res = Vec::with_capacity(x * y);
+        if x == 1 && y == 1 {
+            res.push(unsafe { v.0.val.num });
         } else {
             for j in 0..y {
                 for i in 0..x {
@@ -336,10 +336,18 @@ impl<'a> From<&'a Variant> for Vec<f64> {
 impl<'a> From<&'a Variant> for Vec<String> {
     fn from(v: &'a Variant) -> Vec<String> {
         let (x, y) = v.dim();
-        let mut res = vec![String::new(); x * y];
-
-        if x <= 1 && y <= 1 {
-            //    res.push(TryFrom::<&Variant>::try_from(v).unwrap_or_default());
+        let mut res = Vec::with_capacity(x * y);
+        if x == 1 && y == 1 {
+            let cstr_slice = unsafe {
+                let cstr: *const u16 = v.0.val.str;
+                let cstr_len = *cstr.offset(0) as usize;
+                slice::from_raw_parts(cstr.offset(1), cstr_len)
+            };
+            let s = match String::from_utf16(cstr_slice) {
+                Ok(s) => s,
+                Err(e) => e.to_string(),
+            };
+            res.push(s);
         } else {
             for j in 0..y {
                 for i in 0..x {
