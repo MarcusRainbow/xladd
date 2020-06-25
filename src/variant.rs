@@ -659,7 +659,7 @@ impl<'a> From<&'a Variant> for Array2<f64> {
         let (x, y) = v.dim();
         let mut res = Array2::zeros([y, x]);
         // Not an array
-        if x <= 1 && y <= 1 {
+        if x == 1 && y == 1 {
             res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
         } else {
             for j in 0..y {
@@ -687,7 +687,7 @@ impl<'a> From<&'a Variant> for Array2<String> {
     fn from(v: &'a Variant) -> Array2<String> {
         let (x, y) = v.dim();
         let mut res = Array2::from_elem([y, x], String::new());
-        if x <= 1 && y <= 1 {
+        if x == 1 && y == 1 {
             res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
         } else {
             for j in 0..y {
