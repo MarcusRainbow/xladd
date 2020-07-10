@@ -312,12 +312,12 @@ impl<'a> From<&'a Variant> for Vec<f64> {
         if x == 1 && y == 1 {
             res.push(unsafe { v.0.val.num });
         } else {
+            res.resize(x * y, 0.0);
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice = unsafe {
-                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
-                    };
+                    let slice =
+                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
                     res[index] = if v.xltype & xltypeMask != xltypeNum {
                         0.0f64
@@ -349,12 +349,12 @@ impl<'a> From<&'a Variant> for Vec<String> {
             };
             res.push(s);
         } else {
+            res.resize(x * y, String::new());
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice = unsafe {
-                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
-                    };
+                    let slice =
+                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
                     res[index] = if (v.xltype & xltypeMask) != xltypeStr {
                         String::new()
@@ -665,9 +665,8 @@ impl<'a> From<&'a Variant> for Array2<f64> {
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice = unsafe {
-                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
-                    };
+                    let slice =
+                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
                     res[[j, i]] = if v.xltype & xltypeMask != xltypeNum {
                         0.0f64
@@ -693,9 +692,8 @@ impl<'a> From<&'a Variant> for Array2<String> {
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice = unsafe {
-                        slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, res.len())
-                    };
+                    let slice =
+                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
                     res[[j, i]] = if (v.xltype & xltypeMask) != xltypeStr {
                         String::new()
