@@ -1,4 +1,9 @@
+
 # xladd
+
+**Please Note**
+I'm not the original author of v0.1 and have not been able to contact the original author. However there are enough updates to warrant a fork but I did not want to steal his package name.
+
 
 A library to assist with the development of addins to Excel using the Excel4 and Excel12 APIs.
 
