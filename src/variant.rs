@@ -1,8 +1,10 @@
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
+use xlcall::XLREF12;
+use xlcall::XLMREF12;
 use std::{mem, fmt, slice};
 use xlcall::{XLOPER12, LPXLOPER12, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3, 
-    xltypeNil, xltypeInt, xltypeStr, xltypeErr, xltypeMissing, xltypeNum, xltypeMulti,
+    xltypeNil, xltypeInt, xltypeStr, xltypeErr, xltypeMissing, xltypeNum, xltypeMulti, xltypeRef, xltypeSRef,
     xlbitDLLFree, xlbitXLFree,
     xlerrNull, xlerrDiv0, xlerrValue, xlerrRef, xlerrName, xlerrNum, xlerrNA, xlerrGettingData };
 use entrypoint::excel_free;
@@ -236,9 +238,20 @@ impl Variant {
         }
     }
 
+    /// Does this variant represent a missing entry?
+    pub fn is_missing(&self) -> bool {
+        return self.0.xltype & xltypeMissing == xltypeMissing
+    }
+
     /// Exposes the underlying XLOPER12
     pub fn as_mut_xloper(&mut self) -> &mut XLOPER12 {
         &mut self.0
+    }
+
+    /// Is this a cell reference?
+    pub fn is_ref(&self) -> bool {
+        let xltype = self.0.xltype & xltypeMissing;
+        return xltype == xltypeRef || xltype == xltypeSRef
     }
 
     /// Gets the count of rows and columns. Scalars are treated as 1x1. Missing values are
@@ -247,6 +260,9 @@ impl Variant {
         match self.0.xltype & xltypeMask {
             xltypeMulti => unsafe { (self.0.val.array.columns as usize, self.0.val.array.rows as usize) },
             xltypeMissing => (0, 0),
+            xltypeSRef => get_sref_dim(unsafe { &self.0.val.sref.ref_ }),
+            xltypeRef => get_mref_dim(unsafe { self.0.val.mref.lpmref }),
+
             _ => (1, 1)
         }
     }
@@ -273,6 +289,24 @@ impl Variant {
             }
         }
     }
+}
+
+// Gets the array size of a multi-cell reference. If the reference is badly formed,
+// returns (0, 0)
+fn get_mref_dim(mref: * const XLMREF12) -> (usize, usize) {
+    // currently we only handle single contiguous references
+    if mref.is_null() || unsafe { (*mref).count } != 1 {
+        return (0, 0)
+    }
+
+    return get_sref_dim(unsafe { &(*mref).reftbl[0] })
+}
+
+// Gets the array size of a single-cell reference
+fn get_sref_dim(sref: &XLREF12) -> (usize, usize) {
+    let rows = (sref.rwLast - sref.rwFirst) as usize;
+    let cols = (sref.colLast - sref.colFirst) as usize;
+    (cols, rows)
 }
 
 /// Implement Display, which means we do not need a method for converting to strings. Just use
