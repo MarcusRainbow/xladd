@@ -82,6 +82,31 @@ impl Variant {
         Variant(XLOPER12 { xltype : xltypeStr + xlbitDLLFree, val: xloper12__bindgen_ty_1 { str: p } })
     }
 
+    /// Constructs an XLOPER that contains an array of XLOPERs. The data should match the rows
+    /// and columns.
+    pub fn from_array(cols: usize, rows: usize, data: &[Variant]) -> Variant {
+        let size = cols * rows;
+        let data_len = data.len();
+        if data_len > size {
+            return Variant::from_str("Error: variant data size greater than array size")
+        }
+        let mut array = vec![Variant::from_err(xlerrNA); size];
+        for (i, src) in data.iter().enumerate() {
+            let xloper = Box::new(src.clone());
+            let raw_xloper = Box::into_raw(xloper) as LPXLOPER12;
+            array[i] = Variant::from_xloper(raw_xloper);
+        }
+
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+
+        Variant(XLOPER12 { 
+            xltype : xltypeMulti + xlbitDLLFree, 
+            val: xloper12__bindgen_ty_1 {
+                array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                    lparray, rows : rows as i32, columns : cols as i32 } } })
+    }
+
     /// Construct a variant containing an array from a slice of other variants. The variants
     /// may contain arrays or scalar strings or numbers, which are treated like single-cell 
     /// arrays. They are glued either horizontally (horiz=true) or vertically. If the arrays
