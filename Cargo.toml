@@ -1,6 +1,6 @@
 [package]
 name = "xladd"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Marcus Rainbow"]
 description = "A framework to simplify the construction of Excel Addins in Rust, using the Excel4/12 interface"
 license = "MIT"
