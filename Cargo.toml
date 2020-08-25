@@ -1,9 +1,11 @@
 [package]
 name = "xladd"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Marcus Rainbow"]
 description = "A framework to simplify the construction of Excel Addins in Rust, using the Excel4/12 interface"
 license = "MIT"
+keywords = ["Excel", "Excel12", "Excel4", "xll"]
+categories = ["os::windows-apis", "mathematics"]
 
 [dependencies]
 winapi = { version = "0.3.5", features = ["winuser", "libloaderapi", "debugapi"] }

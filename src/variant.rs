@@ -329,8 +329,8 @@ fn get_mref_dim(mref: * const XLMREF12) -> (usize, usize) {
 
 // Gets the array size of a single-cell reference
 fn get_sref_dim(sref: &XLREF12) -> (usize, usize) {
-    let rows = (sref.rwLast - sref.rwFirst) as usize;
-    let cols = (sref.colLast - sref.colFirst) as usize;
+    let rows = 1 + (sref.rwLast - sref.rwFirst) as usize;
+    let cols = 1 + (sref.colLast - sref.colFirst) as usize;
     (cols, rows)
 }
 
