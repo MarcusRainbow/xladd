@@ -15,17 +15,33 @@ use std::f64;
 
 #[derive(Debug)]
 pub enum XLAddError {
-    F64ConversionFailed,
-    BoolConversionFailed,
-    IntConversionFailed,
-    StringConversionFailed,
+    F64ConversionFailed(String),
+    BoolConversionFailed(String),
+    IntConversionFailed(String),
+    StringConversionFailed(String),
+    MissingArgument(String, String),
 }
 
 impl std::error::Error for XLAddError {}
-
 impl fmt::Display for XLAddError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error")
+        match self {
+            XLAddError::F64ConversionFailed(v) => {
+                write!(f, "Coud not convert parameter [{}] to f64", v)
+            }
+            XLAddError::BoolConversionFailed(v) => {
+                write!(f, "Coud not convert parameter [{}] to bool", v)
+            }
+            XLAddError::IntConversionFailed(v) => {
+                write!(f, "Coud not convert parameter [{}] to integer", v)
+            }
+            XLAddError::StringConversionFailed(v) => {
+                write!(f, "Coud not convert parameter [{}] to string", v)
+            }
+            XLAddError::MissingArgument(func, v) => {
+                write!(f, "Function [{}] is missing parameter {} ", func, v)
+            }
+        }
     }
 }
 
@@ -46,6 +62,10 @@ impl Variant {
             xltype: xltypeMissing,
             val: xloper12__bindgen_ty_1 { w: 0 },
         })
+    }
+
+    pub fn is_missing_or_null(&self) -> bool {
+        self.0.xltype & xltypeMask == xltypeMissing || self.0.xltype & xltypeMask == xltypeNil
     }
 
     /// Construct a variant containing an error. This is used in Excel to represent standard errors
@@ -248,7 +268,7 @@ impl<'a> TryFrom<&'a Variant> for i32 {
     type Error = XLAddError;
     fn try_from(v: &'a Variant) -> Result<i32, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeInt {
-            Err(XLAddError::IntConversionFailed)
+            Err(XLAddError::IntConversionFailed(v.to_string()))
         } else {
             Ok(unsafe { v.0.val.w })
         }
@@ -260,7 +280,7 @@ impl<'a> TryFrom<&'a Variant> for f64 {
     type Error = XLAddError;
     fn try_from(v: &'a Variant) -> Result<f64, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeNum {
-            Err(XLAddError::F64ConversionFailed)
+            Err(XLAddError::F64ConversionFailed(v.to_string()))
         } else {
             Ok(unsafe { v.0.val.num })
         }
@@ -272,7 +292,7 @@ impl<'a> TryFrom<&'a Variant> for bool {
     type Error = XLAddError;
     fn try_from(v: &'a Variant) -> Result<Self, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeBool {
-            Err(XLAddError::BoolConversionFailed)
+            Err(XLAddError::BoolConversionFailed(v.to_string()))
         } else {
             Ok(!unsafe { v.0.val.xbool == 0 })
         }
@@ -288,7 +308,7 @@ impl<'a> TryFrom<&'a Variant> for String {
     type Error = XLAddError;
     fn try_from(v: &'a Variant) -> Result<Self, Self::Error> {
         if (v.0.xltype & xltypeMask) != xltypeStr {
-            Err(XLAddError::StringConversionFailed)
+            Err(XLAddError::StringConversionFailed(v.to_string()))
         } else {
             let cstr_slice = unsafe {
                 let cstr: *const u16 = v.0.val.str;
