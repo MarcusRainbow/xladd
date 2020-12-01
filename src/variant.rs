@@ -461,7 +461,39 @@ impl From<&(&[&str], usize)> for Variant {
         let columns = arr.1;
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
-        } else if rows > 32767 {
+        } else if rows > 65534 {
+            Variant::from_err(xlerrValue)
+        } else {
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: rows as i32,
+                        columns: columns as i32,
+                    },
+                },
+            })
+        }
+    }
+}
+
+// Construct 2d variant array from (string,f64)
+impl From<Vec<(String, f64)>> for Variant {
+    fn from(arr: Vec<(String, f64)>) -> Variant {
+        let mut array = Vec::new();
+        arr.iter().for_each(|v| {
+            array.push(Variant::from(v.0.as_str()));
+            array.push(Variant::from(v.1))
+        });
+
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        let rows = arr.len();
+        let columns = 2;
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else if rows > 65534 {
             Variant::from_err(xlerrValue)
         } else {
             Variant(XLOPER12 {
@@ -495,7 +527,7 @@ impl From<&(&[f64], usize)> for Variant {
         let columns = arr.1;
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
-        } else if rows > 32767 {
+        } else if rows > 65534 {
             Variant::from_err(xlerrValue)
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
@@ -522,7 +554,7 @@ impl From<&str> for Variant {
     fn from(s: &str) -> Variant {
         let mut wstr: Vec<u16> = s.encode_utf16().collect();
         let len = wstr.len();
-        if len > 32767 {
+        if len > 65534 {
             return Variant::from_err(xlerrValue);
         }
 
@@ -750,7 +782,7 @@ impl From<Array2<f64>> for Variant {
         let columns = arr.ncols();
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
-        } else if rows > 32767 {
+        } else if rows > 65534 {
             Variant::from_err(xlerrValue)
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
@@ -769,6 +801,39 @@ impl From<Array2<f64>> for Variant {
     }
 }
 
+#[cfg(feature = "use_ndarray")]
+impl From<Array2<String>> for Variant {
+    fn from(arr: Array2<String>) -> Variant {
+        // Return as a Variant
+        let mut array = arr
+            .iter()
+            .map(|v| match v {
+                v if v.is_empty() => Variant::from_err(xlerrNA),
+                v => Variant::from(v.as_str()),
+            })
+            .collect::<Vec<_>>();
+        let rows = arr.nrows();
+        let columns = arr.ncols();
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else if rows > 65534 {
+            Variant::from_err(xlerrValue)
+        } else {
+            let lparray = array.as_mut_ptr() as LPXLOPER12;
+            mem::forget(array);
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: rows as i32,
+                        columns: columns as i32,
+                    },
+                },
+            })
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
