@@ -330,7 +330,9 @@ impl<'a> From<&'a Variant> for Vec<f64> {
         let (x, y) = v.dim();
         let mut res = Vec::with_capacity(x * y);
         if x == 1 && y == 1 {
-            res.push(unsafe { v.0.val.num });
+            if v.0.xltype & xltypeMask == xltypeNum {
+                res.push(unsafe { v.0.val.num });
+            }
         } else {
             res.resize(x * y, 0.0);
             for j in 0..y {
@@ -351,23 +353,25 @@ impl<'a> From<&'a Variant> for Vec<f64> {
     }
 }
 
-/// Converts a variant into a f64 array filling the missing or invalid with f64::NAN.
+/// Converts a variant into a string array filling the missing or invalid with f64::NAN.
 /// This is so that you can handle those appropriately for your application (for example fill with the mean value or 0)
 impl<'a> From<&'a Variant> for Vec<String> {
     fn from(v: &'a Variant) -> Vec<String> {
         let (x, y) = v.dim();
         let mut res = Vec::with_capacity(x * y);
         if x == 1 && y == 1 {
-            let cstr_slice = unsafe {
-                let cstr: *const u16 = v.0.val.str;
-                let cstr_len = *cstr.offset(0) as usize;
-                slice::from_raw_parts(cstr.offset(1), cstr_len)
-            };
-            let s = match String::from_utf16(cstr_slice) {
-                Ok(s) => s,
-                Err(e) => e.to_string(),
-            };
-            res.push(s);
+            if (v.0.xltype & xltypeMask) == xltypeStr {
+                let cstr_slice = unsafe {
+                    let cstr: *const u16 = v.0.val.str;
+                    let cstr_len = *cstr.offset(0) as usize;
+                    slice::from_raw_parts(cstr.offset(1), cstr_len)
+                };
+                let s = match String::from_utf16(cstr_slice) {
+                    Ok(s) => s,
+                    Err(e) => e.to_string(),
+                };
+                res.push(s);
+            }
         } else {
             res.resize(x * y, String::new());
             for j in 0..y {
@@ -520,6 +524,7 @@ impl From<&(&[f64], usize)> for Variant {
             .iter()
             .map(|&v| match v {
                 v if v.is_nan() => Variant::from_err(xlerrNA),
+                v if v.is_infinite() => Variant::from_err(xlerrNA),
                 v => Variant::from(v),
             })
             .collect::<Vec<_>>();
@@ -723,7 +728,6 @@ impl<'a> From<&'a Variant> for Array2<f64> {
                     res[[j, i]] = if v.xltype & xltypeMask != xltypeNum {
                         0.0f64
                     } else {
-                        dbg!(&unsafe { v.val.num });
                         unsafe { v.val.num }
                     };
                 }
@@ -775,6 +779,7 @@ impl From<Array2<f64>> for Variant {
             .iter()
             .map(|&v| match v {
                 v if v.is_nan() => Variant::from_err(xlerrNA),
+                v if v.is_infinite() => Variant::from_err(xlerrNA),
                 v => Variant::from(v),
             })
             .collect::<Vec<_>>();
