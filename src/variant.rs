@@ -261,65 +261,65 @@ impl Default for Variant {
     }
 }
 
-/// Converts this variant to an int. If we do not contain an int, return None. Note that
-/// Excel cells do not ever contain ints, so this would only come from a non-Excel user
-/// creating an XLOPER, for example the result of a call into Excel.
-impl<'a> TryFrom<&'a Variant> for i32 {
-    type Error = XLAddError;
-    fn try_from(v: &'a Variant) -> Result<i32, Self::Error> {
-        if (v.0.xltype & xltypeMask) != xltypeInt {
-            Err(XLAddError::IntConversionFailed(v.to_string()))
-        } else {
-            Ok(unsafe { v.0.val.w })
-        }
-    }
-}
-
-/// Converts this variant to a float. If we do not contain a float, return Err.
-impl<'a> TryFrom<&'a Variant> for f64 {
-    type Error = XLAddError;
-    fn try_from(v: &'a Variant) -> Result<f64, Self::Error> {
-        if (v.0.xltype & xltypeMask) != xltypeNum {
-            Err(XLAddError::F64ConversionFailed(v.to_string()))
-        } else {
-            Ok(unsafe { v.0.val.num })
-        }
-    }
-}
-
-/// Converts this variant to a bool. If we do not contain a bool, return Err.
-impl<'a> TryFrom<&'a Variant> for bool {
-    type Error = XLAddError;
-    fn try_from(v: &'a Variant) -> Result<Self, Self::Error> {
-        if (v.0.xltype & xltypeMask) != xltypeBool {
-            Err(XLAddError::BoolConversionFailed(v.to_string()))
-        } else {
-            Ok(!unsafe { v.0.val.xbool == 0 })
-        }
-    }
-}
-
-/// Converts this variant to a string. Alternatively, you can use Display or to_string,
-/// which both go through this call if the variant contains a string. Guaranteed to return
-/// Some(...) if this object is of type xltypeStr. Always returns None if this object is
-/// of any other type. If the string contains a unicode string that is misformed, return
-/// the error message.
-impl<'a> TryFrom<&'a Variant> for String {
-    type Error = XLAddError;
-    fn try_from(v: &'a Variant) -> Result<Self, Self::Error> {
-        if (v.0.xltype & xltypeMask) != xltypeStr {
-            Err(XLAddError::StringConversionFailed(v.to_string()))
-        } else {
-            let cstr_slice = unsafe {
-                let cstr: *const u16 = v.0.val.str;
-                let cstr_len = *cstr.offset(0) as usize;
-                slice::from_raw_parts(cstr.offset(1), cstr_len)
-            };
-            match String::from_utf16(cstr_slice) {
-                Ok(s) => Ok(s),
-                Err(e) => Ok(e.to_string()),
+impl From<&xloper12> for String {
+    fn from(v: &xloper12) -> String {
+        match v.xltype & xltypeMask {
+            xltypeNum => unsafe { v.val.num }.to_string(),
+            xltypeStr => {
+                let cstr_slice = unsafe {
+                    let cstr: *const u16 = v.val.str;
+                    let cstr_len = *cstr.offset(0) as usize;
+                    slice::from_raw_parts(cstr.offset(1), cstr_len)
+                };
+                match String::from_utf16(cstr_slice) {
+                    Ok(s) => s,
+                    Err(e) => e.to_string(),
+                }
             }
+            xltypeBool => unsafe { v.val.xbool == 1 }.to_string(),
+            _ => String::new(),
         }
+    }
+}
+
+impl From<&Variant> for String {
+    fn from(v: &Variant) -> String {
+        String::from(&v.0)
+    }
+}
+
+impl From<&xloper12> for f64 {
+    fn from(v: &xloper12) -> f64 {
+        match v.xltype & xltypeMask {
+            xltypeNum => unsafe { v.val.num },
+            xltypeInt => unsafe { v.val.w as f64 },
+            xltypeStr => 0.0,
+            xltypeBool => (unsafe { v.val.xbool == 1 }) as i64 as f64,
+            _ => 0.0,
+        }
+    }
+}
+
+impl From<&Variant> for f64 {
+    fn from(v: &Variant) -> f64 {
+        f64::from(&v.0)
+    }
+}
+
+impl From<&xloper12> for bool {
+    fn from(v: &xloper12) -> bool {
+        match v.xltype & xltypeMask {
+            xltypeNum => unsafe { v.val.num != 0.0 },
+            xltypeStr => false,
+            xltypeBool => unsafe { v.val.xbool != 0 },
+            _ => false,
+        }
+    }
+}
+
+impl From<&Variant> for bool {
+    fn from(v: &Variant) -> bool {
+        bool::from(&v.0)
     }
 }
 
@@ -330,22 +330,15 @@ impl<'a> From<&'a Variant> for Vec<f64> {
         let (x, y) = v.dim();
         let mut res = Vec::with_capacity(x * y);
         if x == 1 && y == 1 {
-            if v.0.xltype & xltypeMask == xltypeNum {
-                res.push(unsafe { v.0.val.num });
-            }
+            res.push(f64::from(v))
         } else {
             res.resize(x * y, 0.0);
+            let slice = unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice =
-                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
-                    res[index] = if v.xltype & xltypeMask != xltypeNum {
-                        0.0f64
-                    } else {
-                        unsafe { v.val.num }
-                    };
+                    res[index] = f64::from(&v);
                 }
             }
         }
@@ -360,39 +353,15 @@ impl<'a> From<&'a Variant> for Vec<String> {
         let (x, y) = v.dim();
         let mut res = Vec::with_capacity(x * y);
         if x == 1 && y == 1 {
-            if (v.0.xltype & xltypeMask) == xltypeStr {
-                let cstr_slice = unsafe {
-                    let cstr: *const u16 = v.0.val.str;
-                    let cstr_len = *cstr.offset(0) as usize;
-                    slice::from_raw_parts(cstr.offset(1), cstr_len)
-                };
-                let s = match String::from_utf16(cstr_slice) {
-                    Ok(s) => s,
-                    Err(e) => e.to_string(),
-                };
-                res.push(s);
-            }
+            res.push(String::from(v));
         } else {
             res.resize(x * y, String::new());
+            let slice = unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice =
-                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
-                    res[index] = if (v.xltype & xltypeMask) != xltypeStr {
-                        String::new()
-                    } else {
-                        let cstr_slice = unsafe {
-                            let cstr: *const u16 = v.val.str;
-                            let cstr_len = *cstr.offset(0) as usize;
-                            slice::from_raw_parts(cstr.offset(1), cstr_len)
-                        };
-                        match String::from_utf16(cstr_slice) {
-                            Ok(s) => s,
-                            Err(e) => e.to_string(),
-                        }
-                    }
+                    res[index] = String::from(&v);
                 }
             }
         }
@@ -425,10 +394,14 @@ impl From<Variant> for LPXLOPER12 {
 /// Construct a variant containing an float (f64)
 impl From<f64> for Variant {
     fn from(num: f64) -> Variant {
-        Variant(XLOPER12 {
-            xltype: xltypeNum,
-            val: xloper12__bindgen_ty_1 { num },
-        })
+        match num {
+            num if num.is_nan() => Variant::from_err(xlerrNA),
+            num if num.is_infinite() => Variant::from_err(xlerrNA),
+            num => Variant(XLOPER12 {
+                xltype: xltypeNum,
+                val: xloper12__bindgen_ty_1 { num },
+            }),
+        }
     }
 }
 
@@ -451,103 +424,6 @@ impl From<i32> for Variant {
             xltype: xltypeInt,
             val: xloper12__bindgen_ty_1 { w },
         })
-    }
-}
-
-/// Construct a variant containing an array of strings
-/// Pass in a tuple of (array, columns), it will calculate the number of rows.
-impl From<&(&[&str], usize)> for Variant {
-    fn from(arr: &(&[&str], usize)) -> Variant {
-        let mut array = arr.0.iter().map(|&v| Variant::from(v)).collect::<Vec<_>>();
-        let lparray = array.as_mut_ptr() as LPXLOPER12;
-        mem::forget(array);
-        let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
-        let columns = arr.1;
-        if rows == 0 || columns == 0 {
-            Variant::from_err(xlerrNull)
-        } else if rows > 65534 {
-            Variant::from_err(xlerrValue)
-        } else {
-            Variant(XLOPER12 {
-                xltype: xltypeMulti,
-                val: xloper12__bindgen_ty_1 {
-                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
-                        lparray,
-                        rows: rows as i32,
-                        columns: columns as i32,
-                    },
-                },
-            })
-        }
-    }
-}
-
-// Construct 2d variant array from (string,f64)
-impl From<Vec<(String, f64)>> for Variant {
-    fn from(arr: Vec<(String, f64)>) -> Variant {
-        let mut array = Vec::new();
-        arr.iter().for_each(|v| {
-            array.push(Variant::from(v.0.as_str()));
-            array.push(Variant::from(v.1))
-        });
-
-        let lparray = array.as_mut_ptr() as LPXLOPER12;
-        mem::forget(array);
-        let rows = arr.len();
-        let columns = 2;
-        if rows == 0 || columns == 0 {
-            Variant::from_err(xlerrNull)
-        } else if rows > 65534 {
-            Variant::from_err(xlerrValue)
-        } else {
-            Variant(XLOPER12 {
-                xltype: xltypeMulti,
-                val: xloper12__bindgen_ty_1 {
-                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
-                        lparray,
-                        rows: rows as i32,
-                        columns: columns as i32,
-                    },
-                },
-            })
-        }
-    }
-}
-
-/// Construct a variant containing an array of strings
-/// Pass in a tuple of (array, columns), it will calculate the number of rows.
-impl From<&(&[f64], usize)> for Variant {
-    fn from(arr: &(&[f64], usize)) -> Variant {
-        // Return as a Variant
-        let mut array = arr
-            .0
-            .iter()
-            .map(|&v| match v {
-                v if v.is_nan() => Variant::from_err(xlerrNA),
-                v if v.is_infinite() => Variant::from_err(xlerrNA),
-                v => Variant::from(v),
-            })
-            .collect::<Vec<_>>();
-        let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
-        let columns = arr.1;
-        if rows == 0 || columns == 0 {
-            Variant::from_err(xlerrNull)
-        } else if rows > 65534 {
-            Variant::from_err(xlerrValue)
-        } else {
-            let lparray = array.as_mut_ptr() as LPXLOPER12;
-            mem::forget(array);
-            Variant(XLOPER12 {
-                xltype: xltypeMulti,
-                val: xloper12__bindgen_ty_1 {
-                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
-                        lparray,
-                        rows: rows as i32,
-                        columns: columns as i32,
-                    },
-                },
-            })
-        }
     }
 }
 
@@ -588,6 +464,93 @@ impl From<String> for Variant {
     }
 }
 
+/// Construct a variant containing an array of strings
+/// Pass in a tuple of (array, columns), it will calculate the number of rows.
+impl From<&(&[&str], usize)> for Variant {
+    fn from(arr: &(&[&str], usize)) -> Variant {
+        let lparray = arr
+            .0
+            .iter()
+            .map(|&v| Variant::from(v))
+            .collect::<Vec<_>>()
+            .as_mut_ptr() as LPXLOPER12;
+        mem::forget(lparray);
+        let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
+        let columns = arr.1;
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else {
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: std::cmp::min(65535, rows as i32),
+                        columns: std::cmp::min(16384, columns as i32),
+                    },
+                },
+            })
+        }
+    }
+}
+
+// Construct 2d variant array from (string,f64)
+impl From<Vec<(String, f64)>> for Variant {
+    fn from(arr: Vec<(String, f64)>) -> Variant {
+        let mut array = Vec::new();
+        arr.iter().for_each(|v| {
+            array.push(Variant::from(v.0.as_str()));
+            array.push(Variant::from(v.1))
+        });
+
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        let rows = arr.len();
+        let columns = 2;
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else {
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: std::cmp::min(65535, rows as i32),
+                        columns: std::cmp::min(16384, columns as i32),
+                    },
+                },
+            })
+        }
+    }
+}
+
+/// Construct a variant containing an array of strings
+/// Pass in a tuple of (array, columns), it will calculate the number of rows.
+impl From<&(&[f64], usize)> for Variant {
+    fn from(arr: &(&[f64], usize)) -> Variant {
+        // Return as a Variant
+        let mut array = arr.0.iter().map(|&v| Variant::from(v)).collect::<Vec<_>>();
+        let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
+        let columns = arr.1;
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else {
+            let lparray = array.as_mut_ptr() as LPXLOPER12;
+            mem::forget(array);
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: std::cmp::min(65535, rows as i32),
+                        columns: std::cmp::min(16384, columns as i32),
+                    },
+                },
+            })
+        }
+    }
+}
+
 /// Implement Display, which means we do not need a method for converting to strings. Just use
 /// to_string.
 impl fmt::Display for Variant {
@@ -615,6 +578,30 @@ impl fmt::Display for Variant {
     }
 }
 
+impl fmt::Debug for Variant {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0.xltype & xltypeMask {
+            xltypeErr => match unsafe { self.0.val.err } as u32 {
+                xlerrNull => write!(f, "#NULL"),
+                xlerrDiv0 => write!(f, "#DIV0"),
+                xlerrValue => write!(f, "#VALUE"),
+                xlerrRef => write!(f, "#REF"),
+                xlerrName => write!(f, "#NAME"),
+                xlerrNum => write!(f, "#NUM"),
+                xlerrNA => write!(f, "#NA"),
+                xlerrGettingData => write!(f, "#DATA"),
+                _ => write!(f, "#BAD_ERR"),
+            },
+            xltypeInt => write!(f, "{}", unsafe { self.0.val.w }),
+            xltypeMissing => write!(f, "#MISSING"),
+            xltypeMulti => write!(f, "#MULTI"),
+            xltypeNil => write!(f, "#NIL"),
+            xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
+            xltypeStr => write!(f, "{}", String::try_from(&self.clone()).unwrap()),
+            _ => write!(f, "#BAD_XLOPER"),
+        }
+    }
+}
 /// We need to implement Drop, as Variant is a wrapper around a union type that does
 /// not know how to handle its contained pointers.
 impl Drop for Variant {
@@ -717,19 +704,14 @@ impl<'a> From<&'a Variant> for Array2<f64> {
         let mut res = Array2::zeros([y, x]);
         // Not an array
         if x == 1 && y == 1 {
-            res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
+            res[[0, 0]] = f64::from(v);
         } else {
+            let slice = unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice =
-                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
-                    res[[j, i]] = if v.xltype & xltypeMask != xltypeNum {
-                        0.0f64
-                    } else {
-                        unsafe { v.val.num }
-                    };
+                    res[[j, i]] = f64::from(&v);
                 }
             }
         }
@@ -745,29 +727,40 @@ impl<'a> From<&'a Variant> for Array2<String> {
         if x == 1 && y == 1 {
             res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
         } else {
+            let slice = unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
             for j in 0..y {
                 for i in 0..x {
                     let index = j * x + i;
-                    let slice =
-                        unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
                     let v = slice[index];
-                    res[[j, i]] = if (v.xltype & xltypeMask) != xltypeStr {
-                        String::new()
-                    } else {
-                        let cstr_slice = unsafe {
-                            let cstr: *const u16 = v.val.str;
-                            let cstr_len = *cstr.offset(0) as usize;
-                            slice::from_raw_parts(cstr.offset(1), cstr_len)
-                        };
-                        match String::from_utf16(cstr_slice) {
-                            Ok(s) => s,
-                            Err(e) => e.to_string(),
-                        }
-                    }
+                    res[[j, i]] = String::from(&v);
                 }
             }
         }
         res
+    }
+}
+use log::*;
+#[cfg(feature = "use_ndarray")]
+impl From<Array2<Variant>> for Variant {
+    fn from(arr: Array2<Variant>) -> Variant {
+        let lparray = arr.as_ptr() as LPXLOPER12;
+        let rows = arr.nrows();
+        let columns = arr.ncols();
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else {
+            mem::forget(lparray);
+            Variant(XLOPER12 {
+                xltype: xltypeMulti,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: std::cmp::min(65535, rows as i32),
+                        columns: std::cmp::min(16384, columns as i32),
+                    },
+                },
+            })
+        }
     }
 }
 
@@ -787,8 +780,6 @@ impl From<Array2<f64>> for Variant {
         let columns = arr.ncols();
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
-        } else if rows > 65534 {
-            Variant::from_err(xlerrValue)
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
             mem::forget(array);
@@ -797,8 +788,8 @@ impl From<Array2<f64>> for Variant {
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: rows as i32,
-                        columns: columns as i32,
+                        rows: std::cmp::min(65535, rows as i32),
+                        columns: std::cmp::min(16384, columns as i32),
                     },
                 },
             })
@@ -821,8 +812,6 @@ impl From<Array2<String>> for Variant {
         let columns = arr.ncols();
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
-        } else if rows > 65534 {
-            Variant::from_err(xlerrValue)
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
             mem::forget(array);
@@ -831,14 +820,15 @@ impl From<Array2<String>> for Variant {
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: rows as i32,
-                        columns: columns as i32,
+                        rows: std::cmp::min(65535, rows as i32),
+                        columns: std::cmp::min(16384, columns as i32),
                     },
                 },
             })
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
