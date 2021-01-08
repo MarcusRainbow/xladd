@@ -382,6 +382,17 @@ impl From<LPXLOPER12> for Variant {
     }
 }
 
+// For async functions
+#[derive(Debug)]
+pub struct XLOPERPtr(pub *mut xloper12);
+unsafe impl Send for XLOPERPtr {}
+
+impl From<XLOPERPtr> for Variant {
+    fn from(xloper: XLOPERPtr) -> Variant {
+        Variant(unsafe { std::mem::transmute::<XLOPER12, xloper12>(*xloper.0) })
+    }
+}
+
 /// Construct a LPXlOPER12 from a Variant. This is just a cast to the underlying union
 /// contained within a pointer that we pass back to Excel. Excel will clean up the pointer
 /// after us
@@ -438,7 +449,6 @@ impl From<&str> for Variant {
         if len > 65534 {
             return Variant::from_err(xlerrValue);
         }
-
         // Pascal-style string with length at the start. Forget the string so we do not delete it.
         // We are now relying on the drop method of Variant to clean it up for us. Note that the
         // shrink_to_fit is essential, so the capacity is the same as the length. We have no way
@@ -448,7 +458,7 @@ impl From<&str> for Variant {
         let p = wstr.as_mut_ptr();
         mem::forget(wstr);
         Variant(XLOPER12 {
-            xltype: xltypeStr + xlbitDLLFree,
+            xltype: xltypeStr | xlbitDLLFree,
             val: xloper12__bindgen_ty_1 { str: p },
         })
     }
@@ -460,7 +470,23 @@ impl From<&str> for Variant {
 /// string that is not valid 16bit Unicode, an xlerrValue error is stored instead.
 impl From<String> for Variant {
     fn from(s: String) -> Variant {
-        From::<&str>::from(s.as_str())
+        let mut wstr: Vec<u16> = s.encode_utf16().collect();
+        let len = wstr.len();
+        if len > 1_0 {
+            return Variant::from_err(xlerrValue);
+        }
+        // Pascal-style string with length at the start. Forget the string so we do not delete it.
+        // We are now relying on the drop method of Variant to clean it up for us. Note that the
+        // shrink_to_fit is essential, so the capacity is the same as the length. We have no way
+        // of storing the capacity otherwise.
+        wstr.insert(0, len as u16);
+        wstr.shrink_to_fit();
+        let p = wstr.as_mut_ptr();
+        mem::forget(wstr);
+        Variant(XLOPER12 {
+            xltype: xltypeStr | xlbitDLLFree,
+            val: xloper12__bindgen_ty_1 { str: p },
+        })
     }
 }
 
@@ -468,25 +494,23 @@ impl From<String> for Variant {
 /// Pass in a tuple of (array, columns), it will calculate the number of rows.
 impl From<&(&[&str], usize)> for Variant {
     fn from(arr: &(&[&str], usize)) -> Variant {
-        let lparray = arr
-            .0
-            .iter()
-            .map(|&v| Variant::from(v))
-            .collect::<Vec<_>>()
-            .as_mut_ptr() as LPXLOPER12;
-        mem::forget(lparray);
+        let mut array = arr.0.iter().map(|&v| Variant::from(v)).collect::<Vec<_>>();
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
         let rows = if arr.1 == 0 { 0 } else { arr.0.len() / arr.1 };
         let columns = arr.1;
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
+        } else if rows == 1 && columns == 1 {
+            Variant::from(arr.0[0])
         } else {
             Variant(XLOPER12 {
-                xltype: xltypeMulti,
+                xltype: xltypeMulti | xlbitDLLFree,
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: std::cmp::min(65535, rows as i32),
-                        columns: std::cmp::min(16384, columns as i32),
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
                     },
                 },
             })
@@ -511,12 +535,12 @@ impl From<Vec<(String, f64)>> for Variant {
             Variant::from_err(xlerrNull)
         } else {
             Variant(XLOPER12 {
-                xltype: xltypeMulti,
+                xltype: xltypeMulti | xlbitDLLFree,
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: std::cmp::min(65535, rows as i32),
-                        columns: std::cmp::min(16384, columns as i32),
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
                     },
                 },
             })
@@ -524,7 +548,34 @@ impl From<Vec<(String, f64)>> for Variant {
     }
 }
 
-/// Construct a variant containing an array of strings
+impl From<Vec<&str>> for Variant {
+    fn from(arr: Vec<&str>) -> Variant {
+        let mut array = Vec::new();
+        arr.iter().for_each(|&v| {
+            array.push(Variant::from(v));
+        });
+
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        let rows = 1;
+        let columns = arr.len();
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else {
+            Variant(XLOPER12 {
+                xltype: xltypeMulti | xlbitDLLFree,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
+                    },
+                },
+            })
+        }
+    }
+}
+
 /// Pass in a tuple of (array, columns), it will calculate the number of rows.
 impl From<&(&[f64], usize)> for Variant {
     fn from(arr: &(&[f64], usize)) -> Variant {
@@ -534,16 +585,18 @@ impl From<&(&[f64], usize)> for Variant {
         let columns = arr.1;
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
+        } else if rows == 1 && columns == 1 {
+            Variant::from(arr.0[0])
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
             mem::forget(array);
             Variant(XLOPER12 {
-                xltype: xltypeMulti,
+                xltype: xltypeMulti | xlbitDLLFree,
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: std::cmp::min(65535, rows as i32),
-                        columns: std::cmp::min(16384, columns as i32),
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
                     },
                 },
             })
@@ -565,7 +618,7 @@ impl fmt::Display for Variant {
                 xlerrNum => write!(f, "#NUM"),
                 xlerrNA => write!(f, "#NA"),
                 xlerrGettingData => write!(f, "#DATA"),
-                _ => write!(f, "#BAD_ERR"),
+                v => write!(f, "#BAD_ERR {}", v),
             },
             xltypeInt => write!(f, "{}", unsafe { self.0.val.w }),
             xltypeMissing => write!(f, "#MISSING"),
@@ -573,7 +626,8 @@ impl fmt::Display for Variant {
             xltypeNil => write!(f, "#NIL"),
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
             xltypeStr => write!(f, "{}", String::try_from(&self.clone()).unwrap()),
-            _ => write!(f, "#BAD_XLOPER"),
+            xlerrNull => write!(f, "#NULL"),
+            v => write!(f, "#BAD_ERR {}", v),
         }
     }
 }
@@ -590,15 +644,16 @@ impl fmt::Debug for Variant {
                 xlerrNum => write!(f, "#NUM"),
                 xlerrNA => write!(f, "#NA"),
                 xlerrGettingData => write!(f, "#DATA"),
-                _ => write!(f, "#BAD_ERR"),
+                v => write!(f, "#BAD_ERR {}", v),
             },
+            xlerrNull => write!(f, "#NULL"),
             xltypeInt => write!(f, "{}", unsafe { self.0.val.w }),
             xltypeMissing => write!(f, "#MISSING"),
             xltypeMulti => write!(f, "#MULTI"),
             xltypeNil => write!(f, "#NIL"),
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
             xltypeStr => write!(f, "{}", String::try_from(&self.clone()).unwrap()),
-            _ => write!(f, "#BAD_XLOPER"),
+            v => write!(f, "#BAD_XLOPER {}", v),
         }
     }
 }
@@ -739,24 +794,24 @@ impl<'a> From<&'a Variant> for Array2<String> {
         res
     }
 }
-use log::*;
 #[cfg(feature = "use_ndarray")]
 impl From<Array2<Variant>> for Variant {
     fn from(arr: Array2<Variant>) -> Variant {
-        let lparray = arr.as_ptr() as LPXLOPER12;
+        let mut array = arr.iter().map(|v| v.clone()).collect::<Vec<_>>();
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
         let rows = arr.nrows();
         let columns = arr.ncols();
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
         } else {
-            mem::forget(lparray);
+            mem::forget(array);
             Variant(XLOPER12 {
-                xltype: xltypeMulti,
+                xltype: xltypeMulti | xlbitDLLFree,
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: std::cmp::min(65535, rows as i32),
-                        columns: std::cmp::min(16384, columns as i32),
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
                     },
                 },
             })
@@ -780,16 +835,18 @@ impl From<Array2<f64>> for Variant {
         let columns = arr.ncols();
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
+        } else if rows == 1 && columns == 1 {
+            Variant::from(arr[[0, 0]])
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
             mem::forget(array);
             Variant(XLOPER12 {
-                xltype: xltypeMulti,
+                xltype: xltypeMulti | xlbitDLLFree,
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: std::cmp::min(65535, rows as i32),
-                        columns: std::cmp::min(16384, columns as i32),
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
                     },
                 },
             })
@@ -812,21 +869,67 @@ impl From<Array2<String>> for Variant {
         let columns = arr.ncols();
         if rows == 0 || columns == 0 {
             Variant::from_err(xlerrNull)
+        } else if rows == 1 && columns == 1 {
+            Variant::from(arr[[0, 0]].as_str())
         } else {
             let lparray = array.as_mut_ptr() as LPXLOPER12;
             mem::forget(array);
             Variant(XLOPER12 {
-                xltype: xltypeMulti,
+                xltype: xltypeMulti | xlbitDLLFree,
                 val: xloper12__bindgen_ty_1 {
                     array: xloper12__bindgen_ty_1__bindgen_ty_3 {
                         lparray,
-                        rows: std::cmp::min(65535, rows as i32),
-                        columns: std::cmp::min(16384, columns as i32),
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
                     },
                 },
             })
         }
     }
+}
+
+#[macro_export]
+macro_rules! max_col {
+    ($x: expr) => ($x);
+    ($x: expr, $($z: expr),+) => (::std::cmp::max($x, max_col!($($z),*)));
+}
+
+#[cfg(feature = "use_ndarray")]
+#[macro_export]
+macro_rules! make_row_table {
+    ($row:expr,$name:literal,$val:expr $(,$rest_name:literal,$rest_val:expr)*) => {{
+        let max_col = max_col!($val.len() $(,$rest_val.len())*);
+        let mut res = Array2::default([$row,max_col+1]);
+        res.fill(Variant::from(""));
+        res[[0,0]] = Variant::from($name);
+        $val.iter().enumerate().for_each(|(idx,&v)| res[[0,idx+1]] = Variant::from(v));
+        let row_id = 0;
+        $(
+            let row_id = row_id + 1;
+            res[[row_id,0]] = Variant::from($rest_name);
+            $rest_val.iter().enumerate().for_each(|(idx,&v)| res[[row_id,idx+1]] = Variant::from(v));
+        )*
+        Variant::from(res)
+    }};
+}
+
+#[cfg(feature = "use_ndarray")]
+#[macro_export]
+macro_rules! make_col_table {
+    ($col:expr,$name:literal,$val:expr $(,$rest_name:literal,$rest_val:expr)*) => {{
+        let max_row = max_col!($val.len() $(,$rest_val.len())*);
+        let mut res = Array2::default([max_row+1,$col]);
+        res.fill(Variant::from(""));
+        res[[0,0]] = Variant::from($name);
+        $val.iter().enumerate().for_each(|(idx,&v)| res[[idx+1,0]] = Variant::from(v));
+        let col_id = 0;
+        $(
+            let col_id = col_id + 1;
+            res[[0,col_id]] = Variant::from($rest_name);
+            $rest_val.iter().enumerate().for_each(|(idx,&v)| res[[idx+1,col_id]] = Variant::from(v));
+        )*
+        Variant::from(res)
+    }};
 }
 
 #[cfg(test)]
