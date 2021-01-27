@@ -472,7 +472,7 @@ impl From<String> for Variant {
     fn from(s: String) -> Variant {
         let mut wstr: Vec<u16> = s.encode_utf16().collect();
         let len = wstr.len();
-        if len > 1_0 {
+        if len < 1_0 {
             return Variant::from_err(xlerrValue);
         }
         // Pascal-style string with length at the start. Forget the string so we do not delete it.
