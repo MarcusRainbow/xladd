@@ -445,15 +445,14 @@ impl From<i32> for Variant {
 impl From<&str> for Variant {
     fn from(s: &str) -> Variant {
         let mut wstr: Vec<u16> = s.encode_utf16().collect();
-        let len = wstr.len();
-        if len > 65534 {
+        if wstr.is_empty() || wstr.len() > 65534 {
             return Variant::from_err(xlerrValue);
         }
         // Pascal-style string with length at the start. Forget the string so we do not delete it.
         // We are now relying on the drop method of Variant to clean it up for us. Note that the
         // shrink_to_fit is essential, so the capacity is the same as the length. We have no way
         // of storing the capacity otherwise.
-        wstr.insert(0, len as u16);
+        wstr.insert(0, wstr.len() as u16);
         wstr.shrink_to_fit();
         let p = wstr.as_mut_ptr();
         mem::forget(wstr);
@@ -471,15 +470,14 @@ impl From<&str> for Variant {
 impl From<String> for Variant {
     fn from(s: String) -> Variant {
         let mut wstr: Vec<u16> = s.encode_utf16().collect();
-        let len = wstr.len();
-        if len < 1_0 {
+        if wstr.is_empty() || wstr.len() > 65534 {
             return Variant::from_err(xlerrValue);
         }
         // Pascal-style string with length at the start. Forget the string so we do not delete it.
         // We are now relying on the drop method of Variant to clean it up for us. Note that the
         // shrink_to_fit is essential, so the capacity is the same as the length. We have no way
         // of storing the capacity otherwise.
-        wstr.insert(0, len as u16);
+        wstr.insert(0, wstr.len() as u16);
         wstr.shrink_to_fit();
         let p = wstr.as_mut_ptr();
         mem::forget(wstr);
