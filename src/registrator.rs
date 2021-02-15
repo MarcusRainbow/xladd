@@ -1,7 +1,7 @@
 use crate::entrypoint::excel12;
 use crate::variant::Variant;
 use crate::xlcall::{xlGetName, xlfRegister};
-use log::trace;
+use log::debug;
 
 /// Allow xlls to register their exported functions with Excel so they can be
 /// used in a spreadsheet or macro. These functions can only be called from
@@ -100,5 +100,5 @@ impl Default for Reg {
 }
 
 pub(crate) fn debug_print(message: &str) {
-    trace!("{}", message);
+    debug!("{}", message);
 }

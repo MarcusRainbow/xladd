@@ -7,8 +7,8 @@ use crate::xlcall::xloper12;
 use crate::xlcall::{
     xlbitDLLFree, xlbitXLFree, xlerrDiv0, xlerrGettingData, xlerrNA, xlerrName, xlerrNull,
     xlerrNum, xlerrRef, xlerrValue, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3,
-    xltypeBool, xltypeErr, xltypeInt, xltypeMissing, xltypeMulti, xltypeNil, xltypeNum, xltypeStr,
-    LPXLOPER12, XLOPER12,
+    xltypeBool, xltypeErr, xltypeInt, xltypeMissing, xltypeMulti, xltypeNil, xltypeNum, xltypeRef,
+    xltypeSRef, xltypeStr, LPXLOPER12, XLMREF12, XLOPER12, XLREF12,
 };
 use std::convert::TryFrom;
 use std::f64;
@@ -218,6 +218,8 @@ impl Variant {
                     self.0.val.array.rows as usize,
                 )
             },
+            xltypeSRef => get_sref_dim(unsafe { &self.0.val.sref.ref_ }),
+            xltypeRef => get_mref_dim(unsafe { self.0.val.mref.lpmref }),
             xltypeMissing => (0, 0),
             _ => (1, 1),
         }
@@ -247,6 +249,11 @@ impl Variant {
                 Self::from(unsafe { self.0.val.array.lparray.add(index) }).clone()
             }
         }
+    }
+
+    pub fn is_ref(&self) -> bool {
+        let xltype = self.0.xltype & xltypeMissing;
+        return xltype == xltypeRef || xltype == xltypeSRef;
     }
 }
 
@@ -445,7 +452,7 @@ impl From<i32> for Variant {
 impl From<&str> for Variant {
     fn from(s: &str) -> Variant {
         let mut wstr: Vec<u16> = s.encode_utf16().collect();
-        if wstr.is_empty() || wstr.len() > 65534 {
+        if wstr.len() > 65534 {
             return Variant::from_err(xlerrValue);
         }
         // Pascal-style string with length at the start. Forget the string so we do not delete it.
@@ -470,7 +477,7 @@ impl From<&str> for Variant {
 impl From<String> for Variant {
     fn from(s: String) -> Variant {
         let mut wstr: Vec<u16> = s.encode_utf16().collect();
-        if wstr.is_empty() || wstr.len() > 65534 {
+        if wstr.len() > 65534 {
             return Variant::from_err(xlerrValue);
         }
         // Pascal-style string with length at the start. Forget the string so we do not delete it.
@@ -600,6 +607,24 @@ impl From<&(&[f64], usize)> for Variant {
             })
         }
     }
+}
+
+// Gets the array size of a multi-cell reference. If the reference is badly formed,
+// returns (0, 0)
+fn get_mref_dim(mref: *const XLMREF12) -> (usize, usize) {
+    // currently we only handle single contiguous references
+    if mref.is_null() || unsafe { (*mref).count } != 1 {
+        return (0, 0);
+    }
+
+    return get_sref_dim(unsafe { &(*mref).reftbl[0] });
+}
+
+// Gets the array size of a single-cell reference
+fn get_sref_dim(sref: &XLREF12) -> (usize, usize) {
+    let rows = 1 + (sref.rwLast - sref.rwFirst) as usize;
+    let cols = 1 + (sref.colLast - sref.colFirst) as usize;
+    (cols, rows)
 }
 
 /// Implement Display, which means we do not need a method for converting to strings. Just use
@@ -928,6 +953,85 @@ macro_rules! make_col_table {
         )*
         Variant::from(res)
     }};
+}
+
+#[macro_export]
+macro_rules! check_arr {
+    ($name:ident) => {
+        if $name.is_empty() {
+            error!("{} At least 1 value reqd", stringify!($arg));
+            return Err(format!("{} At least 1 value reqd", stringify!($arg)).into());
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! check_arr_non_zero_nan {
+    ($name:ident) => {
+        if $name.is_empty() {
+            error!("{} At least 1 value reqd", stringify!($arg));
+            return Err(format!("{} At least 1 value reqd", stringify!($arg)).into());
+        }
+        if $name.iter().any(|&v| v.is_nan() || v == 0.0) {
+            error!("{} Range has a unexpected nan or 0.0", stringify!($arg));
+            return Err(format!("{} Range has a unexpected nan or 0.0", stringify!($arg)).into());
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! check_float {
+    ($name:ident $cmp:tt $v:tt $(,$rname:ident $rcmp:tt $rv:tt)*) => {
+        if !($name $cmp $v) {
+            error!(
+                "{} Floating point value must be {} {}",
+                stringify!($name),
+                stringify!($cmp),
+                stringify!($v)
+            );
+
+            return Err(format!(
+                "{} Floating point value must be {} {}",
+                stringify!($name),
+                stringify!($cmp),
+                stringify!($v)
+            )
+            .into());
+        }
+        $(
+            if !($rname $rcmp $rv) {
+                error!(
+                    "{} Floating point value must be {} {}",
+                    stringify!($rname),
+                    stringify!($rcmp),
+                    stringify!($rv)
+                );
+                return Err(format!(
+                "{} Floating point value must be {} {}",
+                stringify!($rname),
+                stringify!($rcmp),
+                stringify!($rv)
+                )
+                .into());
+            }
+        )*
+    };
+}
+
+#[macro_export]
+macro_rules! check_str {
+    ($name:ident $(,$rest:ident)*) => {
+        if $name.is_empty() {
+            error!("{} At least 1 value reqd",stringify!($name));
+            return Err(format!("{} At least 1 value reqd", stringify!($name)).into());
+        }
+        $(
+            if $rest.is_empty() {
+                error!("{} At least 1 value reqd",stringify!($rest));
+                return Err(format!("{} At least 1 value reqd", stringify!($rest)).into());
+            }
+        )*
+    };
 }
 
 #[cfg(test)]
