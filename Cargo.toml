@@ -1,20 +1,20 @@
 [package]
-name = "xladd"
-version = "0.3.0"
 authors = ["Ronnie Chowdhury"]
+description = "An interface to the Excelv12 api to help write UDF."
 edition = "2018"
+keywords = ["excel", "userdefined", "udf"]
 license = "MIT"
-description="An interface to the Excelv12 api to help write UDF."
-readme="Readme.MD"
-repository="https://github.com/ronniec95/xladd"
-keywords = ["excel","userdefined","udf"]
+name = "xladd"
+readme = "Readme.MD"
+repository = "https://github.com/ronniec95/xladd"
+version = "0.4.0"
 
 [features]
 default = []
-use_ndarray=["ndarray"]
+use_ndarray = ["ndarray"]
 
 [dependencies]
-winapi = { version = "*", features = ["winuser", "libloaderapi", "debugapi"] }
+log = "0.4.8"
+ndarray = {version = "^0.14", optional = true}
 widestring = "*"
-log="0.4.8"
-ndarray = {version = "^0.13", optional=true }
+winapi = {version = "*", features = ["winuser", "libloaderapi", "debugapi"]}
