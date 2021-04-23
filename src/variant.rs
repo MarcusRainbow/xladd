@@ -283,6 +283,10 @@ impl From<&xloper12> for String {
                     Err(e) => e.to_string(),
                 }
             }
+            xltypeMulti => unsafe {
+                let p = v.val.array.lparray;
+                String::from(&Variant::from(p.offset(0))).clone()
+            },
             xltypeBool => unsafe { v.val.xbool == 1 }.to_string(),
             _ => String::new(),
         }
@@ -302,6 +306,10 @@ impl From<&xloper12> for f64 {
             xltypeInt => unsafe { v.val.w as f64 },
             xltypeStr => 0.0,
             xltypeBool => (unsafe { v.val.xbool == 1 }) as i64 as f64,
+            xltypeMulti => unsafe {
+                let p = v.val.array.lparray;
+                f64::from(&*p.offset(0))
+            },
             _ => 0.0,
         }
     }
