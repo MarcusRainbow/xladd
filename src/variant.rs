@@ -803,7 +803,7 @@ impl<'a> From<&'a Variant> for Array2<String> {
         let (x, y) = v.dim();
         let mut res = Array2::from_elem([y, x], String::new());
         if x == 1 && y == 1 {
-            res[[0, 0]] = TryFrom::<&Variant>::try_from(v).unwrap_or_default();
+            res[[0, 0]] = String::from(v);
         } else {
             let slice = unsafe { slice::from_raw_parts::<xloper12>(v.0.val.array.lparray, x * y) };
             for j in 0..y {

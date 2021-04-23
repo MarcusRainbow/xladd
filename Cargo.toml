@@ -7,7 +7,7 @@ license = "MIT"
 name = "xladd"
 readme = "Readme.MD"
 repository = "https://github.com/ronniec95/xladd"
-version = "0.4.0"
+version = "0.4.1"
 
 [features]
 default = []
