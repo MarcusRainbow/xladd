@@ -310,6 +310,7 @@ impl From<&xloper12> for f64 {
                 let p = v.val.array.lparray;
                 f64::from(&*p.offset(0))
             },
+            xlerrDiv0 | xlerrNA => f64::NAN,
             _ => 0.0,
         }
     }
@@ -327,6 +328,10 @@ impl From<&xloper12> for bool {
             xltypeNum => unsafe { v.val.num != 0.0 },
             xltypeStr => false,
             xltypeBool => unsafe { v.val.xbool != 0 },
+            xltypeMulti => unsafe {
+                let p = v.val.array.lparray;
+                bool::from(&*p.offset(0))
+            },
             _ => false,
         }
     }
