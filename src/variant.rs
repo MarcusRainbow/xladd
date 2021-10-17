@@ -45,7 +45,7 @@ impl fmt::Display for XLAddError {
     }
 }
 
-const xltypeMask: u32 = !(xlbitDLLFree | xlbitXLFree);
+pub const xltypeMask: u32 = !(xlbitDLLFree | xlbitXLFree);
 const xltypeStr_xlbitDLLFree: u32 = xltypeStr | xlbitDLLFree;
 const xltypeMulti_xlbitDLLFree: u32 = xltypeMulti | xlbitDLLFree;
 
@@ -304,14 +304,13 @@ impl From<&xloper12> for f64 {
         match v.xltype & xltypeMask {
             xltypeNum => unsafe { v.val.num },
             xltypeInt => unsafe { v.val.w as f64 },
-            xltypeStr => 0.0,
+            xltypeStr => f64::NAN,
             xltypeBool => (unsafe { v.val.xbool == 1 }) as i64 as f64,
             xltypeMulti => unsafe {
                 let p = v.val.array.lparray;
                 f64::from(&*p.offset(0))
             },
-            xlerrDiv0 | xlerrNA => f64::NAN,
-            _ => 0.0,
+            _ => f64::NAN,
         }
     }
 }
@@ -340,6 +339,13 @@ impl From<&xloper12> for bool {
 impl From<&Variant> for bool {
     fn from(v: &Variant) -> bool {
         bool::from(&v.0)
+    }
+}
+
+impl<'a> From<&'a xloper12> for Vec<f64> {
+    fn from(xloper: &'a xloper12) -> Vec<f64> {
+        let result = Variant(*xloper);
+        <Vec<f64>>::from(&Variant::from(result))
     }
 }
 
@@ -566,6 +572,35 @@ impl From<Vec<(String, f64)>> for Variant {
     }
 }
 
+impl From<Vec<(Variant, f64)>> for Variant {
+    fn from(arr: Vec<(Variant, f64)>) -> Variant {
+        let mut array = Vec::new();
+        arr.iter().for_each(|v| {
+            array.push(v);
+            array.push(v)
+        });
+
+        let lparray = array.as_mut_ptr() as LPXLOPER12;
+        mem::forget(array);
+        let rows = arr.len();
+        let columns = 2;
+        if rows == 0 || columns == 0 {
+            Variant::from_err(xlerrNull)
+        } else {
+            Variant(XLOPER12 {
+                xltype: xltypeMulti | xlbitDLLFree,
+                val: xloper12__bindgen_ty_1 {
+                    array: xloper12__bindgen_ty_1__bindgen_ty_3 {
+                        lparray,
+                        rows: std::cmp::min(1_048_575, rows as i32),
+                        columns: std::cmp::min(16383, columns as i32),
+                    },
+                },
+            })
+        }
+    }
+}
+
 impl From<Vec<&str>> for Variant {
     fn from(arr: Vec<&str>) -> Variant {
         let mut array = Vec::new();
@@ -687,6 +722,7 @@ impl fmt::Debug for Variant {
             xltypeMissing => write!(f, "#MISSING"),
             xltypeMulti => write!(f, "#MULTI"),
             xltypeNil => write!(f, "#NIL"),
+            xltypeBool => write!(f, "{}", unsafe { self.0.val.xbool }),
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
             xltypeStr => write!(f, "{}", String::try_from(&self.clone()).unwrap()),
             v => write!(f, "#BAD_XLOPER {}", v),

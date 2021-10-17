@@ -7,14 +7,18 @@ license = "MIT"
 name = "xladd"
 readme = "Readme.MD"
 repository = "https://github.com/ronniec95/xladd"
-version = "0.4.1"
+version = "0.4.2"
 
 [features]
 default = []
 use_ndarray = ["ndarray"]
 
 [dependencies]
+bincode = "^1"
+lazy_static = "1.4.0"
 log = "0.4.8"
 ndarray = {version = "^0.14", optional = true}
+serde = "^1"
+serde_derive = "^1"
 widestring = "*"
 winapi = {version = "*", features = ["winuser", "libloaderapi", "debugapi"]}
