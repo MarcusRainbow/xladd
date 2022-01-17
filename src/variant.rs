@@ -3,13 +3,14 @@
 use std::{fmt, mem, slice};
 //#[cfg(feature = "try_from")]
 use crate::entrypoint::excel_free;
-use crate::xlcall::xloper12;
 use crate::xlcall::{
     xlbitDLLFree, xlbitXLFree, xlerrDiv0, xlerrGettingData, xlerrNA, xlerrName, xlerrNull,
-    xlerrNum, xlerrRef, xlerrValue, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_3,
-    xltypeBool, xltypeErr, xltypeInt, xltypeMissing, xltypeMulti, xltypeNil, xltypeNum, xltypeRef,
-    xltypeSRef, xltypeStr, LPXLOPER12, XLMREF12, XLOPER12, XLREF12,
+    xlerrNum, xlerrRef, xlerrValue, xloper12__bindgen_ty_1, xloper12__bindgen_ty_1__bindgen_ty_1,
+    xloper12__bindgen_ty_1__bindgen_ty_3, xltypeBool, xltypeErr, xltypeInt, xltypeMissing,
+    xltypeMulti, xltypeNil, xltypeNum, xltypeRef, xltypeSRef, xltypeStr, LPXLOPER12, XLMREF12,
+    XLOPER12, XLREF12,
 };
+use crate::xlcall::{xloper12, xlref12};
 use std::convert::TryFrom;
 use std::f64;
 
@@ -249,6 +250,29 @@ impl Variant {
                 Self::from(unsafe { self.0.val.array.lparray.add(index) }).clone()
             }
         }
+    }
+
+    pub fn location(&self) -> (i32, i32) {
+        let row = unsafe { self.0.val.sref.ref_.rwFirst };
+        let col = unsafe { self.0.val.sref.ref_.colFirst };
+        (row, col)
+    }
+
+    pub fn as_sref(rowStart: i32, rowEnd: i32, colStart: i32, colEnd: i32) -> Variant {
+        Variant(XLOPER12 {
+            xltype: xltypeSRef,
+            val: xloper12__bindgen_ty_1 {
+                sref: xloper12__bindgen_ty_1__bindgen_ty_1 {
+                    count: 1,
+                    ref_: xlref12 {
+                        rwFirst: rowStart,
+                        rwLast: rowEnd,
+                        colFirst: colStart,
+                        colLast: colEnd,
+                    },
+                },
+            },
+        })
     }
 
     pub fn is_ref(&self) -> bool {
@@ -698,6 +722,14 @@ impl fmt::Display for Variant {
             xltypeNum => write!(f, "{}", unsafe { self.0.val.num }),
             xltypeStr => write!(f, "{}", String::try_from(&self.clone()).unwrap()),
             xlerrNull => write!(f, "#NULL"),
+            xltypeSRef => write!(
+                f,
+                "Sref:({},{}) -> ({},{})",
+                unsafe { self.0.val.sref.ref_.rwFirst },
+                unsafe { self.0.val.sref.ref_.colFirst },
+                unsafe { self.0.val.sref.ref_.rwLast },
+                unsafe { self.0.val.sref.ref_.colLast }
+            ),
             v => write!(f, "#BAD_ERR {}", v),
         }
     }

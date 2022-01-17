@@ -33,15 +33,21 @@ static mut PEXCEL12: usize = 0;
 /// of pointers. For example, if you have a single argument, it is faster to invoke
 /// the single arg version.
 pub fn excel12(xlfn: u32, opers: &mut [Variant]) -> Variant {
-    debug_print(&format!("excel12({},{})", xlfn, opers.len()));
-    let mut result = Variant::default();
+    debug_print(&format!("FuncID:{}, {} args)", xlfn, opers.len()));
     let mut args: Vec<LPXLOPER12> = Vec::with_capacity(opers.len());
     for oper in opers.iter_mut() {
         debug_print(&format!("arg: {}", oper));
         args.push(oper.as_mut_xloper());
     }
-    excel12v(xlfn as i32, result.as_mut_xloper(), &args);
-    result
+    let mut result = Variant::default();
+    let res = excel12v(xlfn as i32, result.as_mut_xloper(), &args);
+    match res {
+        0 => result,
+        v => {
+            debug_print(&format!("ReturnCode {}", v));
+            result
+        }
+    }
 }
 
 pub fn excel12_1(xlfn: u32, mut oper: Variant) -> Variant {
